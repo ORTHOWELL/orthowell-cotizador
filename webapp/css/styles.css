@@ -444,3 +444,65 @@ textarea { resize: vertical; min-height: 60px; }
 #pwa-banner.show { display: flex; }
 #pwa-banner button { background: var(--orange); border: none; color: white; border-radius: 7px; padding: 6px 14px; font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 12px; cursor: pointer; }
 #pwa-banner .dismiss { background: none; border: 1px solid rgba(255,255,255,.2); color: #aaa; margin-left: 4px; }
+
+/* ── RESPONSIVE MÓVIL ── */
+@media (max-width: 600px) {
+
+  /* Header compacto */
+  header { padding: 0 14px; height: 52px; }
+  .logo-text { font-size: 15px; }
+  .header-subtitle { display: none; }
+  .sync-status { display: none; }
+  .header-user span { display: none; }
+  .header-user img { width: 26px; height: 26px; }
+  .btn-sync { padding: 5px 8px; font-size: 10px; }
+  .btn-sync span { display: none; }
+  .btn-logout { padding: 5px 8px; font-size: 10px; }
+
+  /* Tabs más compactas */
+  .tabs { padding: 0 8px; gap: 2px; overflow-x: auto; }
+  .tab { padding: 9px 12px; font-size: 10px; letter-spacing: 0; white-space: nowrap; }
+
+  /* Container sin padding excesivo */
+  .container { padding: 14px 12px; }
+
+  /* Cards */
+  .card { border-radius: 10px; }
+  .card-body { padding: 12px; }
+  .card-header { padding: 10px 14px; }
+
+  /* Botones de acción del catálogo en columna */
+  .card-header { flex-wrap: wrap; gap: 6px; }
+
+  /* Tabla de items de cotización */
+  .items-table th:nth-child(3),
+  .items-table td:nth-child(3) { display: none; }
+  .items-table { font-size: 11px; }
+
+  /* Consulta: hero apilado verticalmente */
+  .consulta-hero { flex-direction: column; gap: 16px; padding: 16px; align-items: center; }
+  .consulta-img { width: 140px; height: 140px; }
+  .consulta-name { font-size: 17px; text-align: center; }
+  .consulta-ref { display: block; text-align: center; }
+  .consulta-marca { justify-content: center; }
+  .consulta-add-btn { width: 100%; justify-content: center; }
+
+  /* Consulta: grid 2 columnas en lugar de 3 */
+  .consulta-grid { grid-template-columns: repeat(2, 1fr); padding: 14px; gap: 8px; }
+  .consulta-tile-value { font-size: 16px; }
+
+  /* Search results */
+  .search-results { max-height: 220px; }
+
+  /* Modales más anchos en móvil */
+  .modal-box { width: 96vw; max-width: 96vw; padding: 18px 14px; margin: 10px; }
+
+  /* PWA banner */
+  #pwa-banner { width: 90vw; white-space: normal; text-align: center; flex-direction: column; bottom: 70px; }
+
+  /* Toast */
+  .toast { right: 12px; left: 12px; bottom: 16px; font-size: 12px; }
+
+  /* Dos columnas en layout principal */
+  .two-col { grid-template-columns: 1fr; }
+}
