@@ -12,12 +12,12 @@ const CONFIG = {
   // ─── GOOGLE OAUTH ───────────────────────────────────────────
   // Obtenido en: Google Cloud Console → APIs → Credenciales → ID de cliente OAuth
   // Formato: xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com
-  GOOGLE_CLIENT_ID: '420825323169-705n8tnp22alekd4356m3caafug3qtku.apps.googleusercontent.com,'
+  GOOGLE_CLIENT_ID: '420825323169-705n8tnp22alekd4356m3caafug3qtku.apps.googleusercontent.com',
 
   // ─── GOOGLE SHEETS ──────────────────────────────────────────
   // ID del Google Sheet (la parte larga en la URL del sheet)
   // Ejemplo URL: https://docs.google.com/spreadsheets/d/  <<ESTE_ES_EL_ID>>  /edit
-  SPREADSHEET_ID: 'https://docs.google.com/spreadsheets/d/1FIgB1QmUlG99BazJDuqwYtAtKt2dbHOSlX5MiXkcvh8/edit?gid=0#gid=0,'
+  SPREADSHEET_ID: '1FIgB1QmUlG99BazJDuqwYtAtKt2dbHOSlX5MiXkcvh8',
 
   // Nombre de la pestaña donde se guarda el catálogo
   SHEET_NAME: 'Catalogo',
