@@ -1,0 +1,176 @@
+/**
+ * auth.js — Autenticación Google OAuth via Google Identity Services (GIS)
+ * No requiere backend: el token se obtiene directamente en el navegador.
+ */
+
+const Auth = (() => {
+  let _token = null;
+  let _tokenExpiry = 0;
+  let _userInfo = null;
+  let _tokenClient = null;
+
+  // ── INIT ──────────────────────────────────────────────────────────
+  async function init() {
+    // Esperar a que cargue la librería GIS
+    if (!window.google?.accounts) {
+      await new Promise(resolve => {
+        const check = setInterval(() => {
+          if (window.google?.accounts) { clearInterval(check); resolve(); }
+        }, 100);
+        setTimeout(() => { clearInterval(check); resolve(); }, 5000);
+      });
+    }
+
+    if (!window.google?.accounts) {
+      _showError('No se pudo cargar Google Identity Services. Verifica tu conexión.');
+      return false;
+    }
+
+    if (CONFIG.GOOGLE_CLIENT_ID.startsWith('TODO')) {
+      _showError('⚙️ Configura tu GOOGLE_CLIENT_ID en js/config.js para comenzar.');
+      return false;
+    }
+
+    _tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CONFIG.GOOGLE_CLIENT_ID,
+      scope: CONFIG.GOOGLE_SCOPES,
+      callback: _handleTokenResponse,
+    });
+
+    // Intentar restaurar sesión silenciosa
+    const saved = sessionStorage.getItem('ow_user');
+    if (saved) {
+      try {
+        _userInfo = JSON.parse(saved);
+        _token = sessionStorage.getItem('ow_token');
+        _tokenExpiry = parseInt(sessionStorage.getItem('ow_token_exp') || '0');
+        if (_token && Date.now() < _tokenExpiry) {
+          _showApp();
+          return true;
+        }
+      } catch(e) {}
+    }
+
+    // Sin sesión válida → mostrar pantalla de login
+    _showLogin();
+    return false;
+  }
+
+  // ── HANDLE TOKEN RESPONSE ────────────────────────────────────────
+  function _handleTokenResponse(resp) {
+    if (resp.error) {
+      console.error('OAuth error:', resp.error);
+      _showError('Error de autenticación: ' + resp.error);
+      _showLogin();
+      return;
+    }
+
+    _token = resp.access_token;
+    _tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
+    sessionStorage.setItem('ow_token', _token);
+    sessionStorage.setItem('ow_token_exp', _tokenExpiry.toString());
+
+    // Obtener info del usuario
+    fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: 'Bearer ' + _token }
+    })
+    .then(r => r.json())
+    .then(info => {
+      _userInfo = info;
+      sessionStorage.setItem('ow_user', JSON.stringify(info));
+      _showApp();
+      // Iniciar la app después de autenticar
+      if (typeof App !== 'undefined') App.afterAuth();
+    })
+    .catch(() => {
+      _showApp();
+      if (typeof App !== 'undefined') App.afterAuth();
+    });
+
+    // Auto-renovar token antes de expirar
+    const renewIn = (resp.expires_in - 120) * 1000;
+    setTimeout(() => {
+      if (_tokenClient) _tokenClient.requestAccessToken({ prompt: '' });
+    }, Math.max(renewIn, 60000));
+  }
+
+  // ── LOGIN / LOGOUT ───────────────────────────────────────────────
+  function login() {
+    if (!_tokenClient) {
+      _showError('Google no ha cargado aún. Recarga la página.');
+      return;
+    }
+    document.getElementById('auth-error').textContent = '';
+    _tokenClient.requestAccessToken({ prompt: 'select_account' });
+  }
+
+  function logout() {
+    if (_token) {
+      google.accounts.oauth2.revoke(_token, () => {});
+    }
+    _token = null; _userInfo = null; _tokenExpiry = 0;
+    sessionStorage.removeItem('ow_token');
+    sessionStorage.removeItem('ow_token_exp');
+    sessionStorage.removeItem('ow_user');
+    _showLogin();
+    if (typeof App !== 'undefined') App.onLogout();
+  }
+
+  // ── TOKEN REFRESH ────────────────────────────────────────────────
+  async function ensureToken() {
+    if (_token && Date.now() < _tokenExpiry) return _token;
+    // Token expirado → pedir silenciosamente
+    return new Promise((resolve, reject) => {
+      if (!_tokenClient) { reject(new Error('No auth client')); return; }
+      const origCallback = _tokenClient.callback;
+      _tokenClient.callback = (resp) => {
+        _tokenClient.callback = origCallback;
+        if (resp.error) { reject(new Error(resp.error)); return; }
+        _token = resp.access_token;
+        _tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
+        sessionStorage.setItem('ow_token', _token);
+        sessionStorage.setItem('ow_token_exp', _tokenExpiry.toString());
+        resolve(_token);
+      };
+      _tokenClient.requestAccessToken({ prompt: '' });
+    });
+  }
+
+  // ── UI HELPERS ───────────────────────────────────────────────────
+  function _showLogin() {
+    const overlay = document.getElementById('auth-overlay');
+    if (overlay) overlay.classList.remove('hidden');
+    _updateHeaderUser();
+  }
+  function _showApp() {
+    const overlay = document.getElementById('auth-overlay');
+    if (overlay) overlay.classList.add('hidden');
+    _updateHeaderUser();
+  }
+  function _showError(msg) {
+    const el = document.getElementById('auth-error');
+    if (el) el.textContent = msg;
+  }
+  function _updateHeaderUser() {
+    const nameEl = document.getElementById('user-name');
+    const avatarEl = document.getElementById('user-avatar');
+    if (nameEl) nameEl.textContent = _userInfo?.name || _userInfo?.email || '';
+    if (avatarEl && _userInfo?.picture) {
+      avatarEl.src = _userInfo.picture;
+      avatarEl.style.display = 'inline';
+    } else if (avatarEl) {
+      avatarEl.style.display = 'none';
+    }
+  }
+
+  // ── PUBLIC API ───────────────────────────────────────────────────
+  return {
+    init,
+    login,
+    logout,
+    getToken: () => _token,
+    ensureToken,
+    getUser: () => _userInfo,
+    isAuthenticated: () => !!_token && Date.now() < _tokenExpiry,
+  };
+})();

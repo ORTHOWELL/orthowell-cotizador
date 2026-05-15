@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#111318">
+<meta name="description" content="Cotizador Comercial ORTHOWELL SAS">
+<title>Cotizador ORTHOWELL</title>
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+
+<!-- Fonts + CSS -->
+<link rel="stylesheet" href="./css/styles.css">
+
+<!-- jsPDF + SheetJS (CDN, funciona offline desde cache SW) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Google Identity Services (OAuth — requiere internet la primera vez) -->
+<script src="https://accounts.google.com/gsi/client" async></script>
+</head>
+<body>
+
+<!-- ══ AUTH OVERLAY ══════════════════════════════════════════════ -->
+<div id="auth-overlay">
+  <div class="auth-card">
+    <div class="auth-logo-box">Ortho<br>Well</div>
+    <div class="auth-title">ORTHO<span>WELL</span></div>
+    <div class="auth-subtitle">Cotizador Comercial · v2.0</div>
+    <button class="btn-google" onclick="Auth.login()">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+      </svg>
+      Iniciar sesión con Google
+    </button>
+    <div id="auth-error"></div>
+    <div class="auth-note">Solo para el equipo ORTHOWELL · Datos seguros en Google</div>
+  </div>
+</div>
+
+<!-- ══ HEADER ═════════════════════════════════════════════════════ -->
+<header>
+  <div class="logo-area">
+    <div class="logo-box">Ortho<br>Well</div>
+    <div>
+      <div class="logo-text">ORTHO<span>WELL</span></div>
+      <div class="header-subtitle">Cotizador Comercial</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <!-- Sync status -->
+    <div class="sync-status" id="sync-status">
+      <div class="dot"></div>
+      <span>Iniciando...</span>
+    </div>
+    <button class="btn-sync" id="btn-sync" onclick="Sync.syncNow()" title="Sincronizar ahora desde Google Sheets">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/>
+        <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+      </svg>
+      Sincronizar
+    </button>
+    <!-- Usuario -->
+    <div class="header-user">
+      <img id="user-avatar" src="" alt="" style="display:none;">
+      <span id="user-name"></span>
+    </div>
+    <button class="btn-logout" onclick="Auth.logout()" title="Cerrar sesión">Salir</button>
+  </div>
+</header>
+
+<!-- ══ TABS ═══════════════════════════════════════════════════════ -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('cotizar')">📋 Nueva Cotización</div>
+  <div class="tab" onclick="switchTab('consulta')">🔎 Consulta</div>
+  <div class="tab" onclick="switchTab('catalogo')">📦 Catálogo</div>
+</div>
+
+<!-- ══ PANEL: COTIZAR ══════════════════════════════════════════════ -->
+<div id="panel-cotizar" class="panel active">
+<div class="container">
+<div class="two-col">
+  <div style="display:flex;flex-direction:column;gap:16px;">
+
+    <!-- Datos del Cliente -->
+    <div class="card">
+      <div class="card-header"><div class="dot"></div>Datos del Cliente</div>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="form-group full"><label>Cliente / Entidad</label><input type="text" id="cliente" placeholder="Ej: RED MEDICRON SAS..." oninput="updateSummary()"/></div>
+          <div class="form-group"><label>N° Cotización</label><input type="text" id="num_cot" oninput="updateSummary()"/></div>
+          <div class="form-group"><label>Fecha</label><input type="date" id="fecha"/></div>
+          <div class="form-group"><label>Condiciones de Pago</label>
+            <select id="condiciones" onchange="updateSummary()">
+              <option>CONTADO</option><option>CRÉDITO 30 DÍAS</option><option>CRÉDITO 60 DÍAS</option><option>A CONVENIR</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Ciudad</label><input type="text" id="ciudad" value="PASTO"/></div>
+          <div class="form-group"><label>Contacto</label><input type="text" id="contacto" placeholder="Nombre del contacto (opcional)"/></div>
+          <div class="form-group"><label>Validez de la Oferta</label>
+            <select id="validez"><option>10 Días</option><option>15 Días</option><option>20 Días</option><option>30 Días</option></select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agregar Productos -->
+    <div class="card search-card">
+      <div class="card-header"><div class="dot"></div>Agregar Productos</div>
+      <div class="card-body">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" placeholder="Buscar por nombre, referencia o marca..." oninput="buscarProducto(this.value)" autocomplete="off"/>
+          <div class="search-results" id="search-results"></div>
+        </div>
+
+        <div class="section-title">O agregar manualmente</div>
+
+        <div class="form-grid" style="grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div class="form-group"><label>Descripción *</label><input type="text" id="m-desc" placeholder="Nombre del producto"/></div>
+          <div class="form-group"><label>Referencia</label><input type="text" id="m-ref" placeholder="Ej: MG008" style="font-family:'DM Mono',monospace;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9\-]/g,'')"/></div>
+          <div class="form-group"><label>Marca</label><input type="text" id="m-marca" placeholder="Ej: GMD, KAMEX..."/></div>
+        </div>
+
+        <div class="form-grid" style="grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;">
+          <div class="form-group"><label>Precio 1 (COP) *</label><input type="number" id="m-precio" placeholder="0"/></div>
+          <div class="form-group"><label>Precio 2</label><input type="number" id="m-precio2" placeholder="0"/></div>
+          <div class="form-group"><label>Precio 3</label><input type="number" id="m-precio3" placeholder="0"/></div>
+        </div>
+
+        <div style="background:var(--surface);border-radius:8px;padding:10px 12px;border:1px solid var(--border-light);margin-bottom:10px;">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;">Datos internos</div>
+          <div class="form-grid" style="grid-template-columns:repeat(4,1fr);gap:10px;">
+            <div class="form-group"><label>Costo</label><input type="number" id="m-costo" placeholder="0" style="background:#fff8f0;border-color:#f5c89a;"/></div>
+            <div class="form-group"><label>IVA %</label><input type="number" id="m-iva" placeholder="0" min="0" max="100"/></div>
+            <div class="form-group"><label>Saldo</label><input type="number" id="m-saldo" placeholder="0"/></div>
+            <div class="form-group"><label>Cantidad</label><input type="number" id="m-cant" value="1" min="1"/></div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Observaciones (para esta cotización)</label>
+          <input type="text" id="m-obs" placeholder="Ej: ENTREGA 8 DÍAS"/>
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="agregarManual(false)">+ Solo a cotización</button>
+          <button class="btn btn-primary btn-sm" onclick="agregarManual(true)">+ A cotización y al catálogo</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ítems de la Cotización -->
+    <div class="card">
+      <div class="card-header"><div class="dot"></div>Ítems de la Cotización <span id="items-count" style="margin-left:auto;font-weight:500;font-size:11px;color:var(--muted);"></span></div>
+      <div class="card-body" style="padding:0 0 16px 0;">
+        <div id="items-container"><div class="empty-state"><div class="icon">📋</div><p>Aún no has agregado productos.</p></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="summary-card">
+      <div class="summary-card-header"><div class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--orange);box-shadow:0 0 0 3px rgba(242,101,34,.3);"></div><span>Resumen</span></div>
+      <div class="summary-body">
+        <div class="summary-row"><span>Cliente</span><span id="sum-cliente" style="max-width:180px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</span></div>
+        <div class="summary-row"><span>N° Cotización</span><span id="sum-num">—</span></div>
+        <div class="summary-row"><span>Condiciones</span><span id="sum-cond"></span></div>
+        <div class="summary-row"><span>Productos</span><span id="sum-items">0 ítems</span></div>
+        <div class="summary-row total"><span>TOTAL</span><span id="sum-total">$0</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="dot"></div>Notas Adicionales</div>
+      <div class="card-body">
+        <textarea id="notas-extra" placeholder="Condiciones especiales, descuentos, observaciones..." style="width:100%;min-height:80px;font-size:13px;"></textarea>
+      </div>
+    </div>
+
+    <div class="sidebar-actions">
+      <button class="btn-generate" onclick="Pdf.generarPDF()">⬇️ Generar Cotización PDF</button>
+      <div class="sidebar-tools">
+        <button class="btn-tool" onclick="abrirBrand()">🖼️ Encabezado</button>
+        <button class="btn-tool" onclick="abrirNotasPDF()">📝 Notas PDF</button>
+        <button class="btn-tool danger" onclick="limpiarFormulario()" style="grid-column:1/-1;">🗑️ Limpiar cotización</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+
+<!-- ══ PANEL: CONSULTA ════════════════════════════════════════════ -->
+<div id="panel-consulta" class="panel">
+<div class="container" style="max-width:1000px;">
+  <div style="position:relative;margin-bottom:8px;">
+    <div class="search-box" style="margin-bottom:0;">
+      <span class="search-icon" style="font-size:18px;">🔎</span>
+      <input type="text" id="consulta-input"
+        style="width:100%;padding:14px 16px 14px 44px;font-size:16px;border-radius:12px;border:2px solid var(--border);"
+        placeholder="Buscar producto por nombre, referencia o marca..."
+        oninput="consultaBuscar(this.value)" autocomplete="off"/>
+    </div>
+    <div id="consulta-count" style="font-size:12px;color:var(--muted);margin-top:6px;padding-left:4px;"></div>
+  </div>
+
+  <div id="consulta-body" style="display:none;flex-direction:column;gap:16px;margin-top:16px;">
+    <div class="card" style="overflow:hidden;">
+      <div class="card-header"><div class="dot"></div><span id="consulta-list-title">Resultados</span></div>
+      <div class="card-body" style="padding:10px;">
+        <div id="consulta-list" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+      </div>
+    </div>
+    <div id="consulta-detail"></div>
+  </div>
+
+  <div id="consulta-empty" class="empty-state" style="margin-top:60px;">
+    <div class="icon">🔎</div>
+    <p style="font-size:15px;font-weight:600;color:var(--text2);">Busca un producto para ver todos sus datos</p>
+    <p style="font-size:12px;margin-top:6px;">Puedes buscar por nombre, referencia o marca</p>
+  </div>
+</div>
+</div>
+
+<!-- ══ PANEL: CATÁLOGO ═════════════════════════════════════════════ -->
+<div id="panel-catalogo" class="panel">
+<div class="container">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
+    <div>
+      <h2 style="font-size:20px;font-weight:800;">Catálogo de Productos</h2>
+      <p style="font-size:13px;color:var(--muted);margin-top:3px;">
+        <span id="cat-count" style="font-weight:700;color:var(--orange);"></span>
+        &nbsp;· Sincronizado con Google Sheets · Imágenes en Google Drive
+      </p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-outline btn-sm" onclick="Catalog.exportarExcel()">⬇️ Exportar Excel</button>
+      <label class="btn btn-outline btn-sm" style="cursor:pointer;margin:0;">
+        ⬆️ Importar Excel
+        <input type="file" id="excel-inp" accept=".xlsx,.xls,.csv" style="display:none;" onchange="Catalog.importarExcel(event)"/>
+      </label>
+      <label class="btn btn-primary btn-sm" style="cursor:pointer;margin:0;background:var(--orange);border-color:var(--orange);" title="Actualizar desde sistema contable ORTHOWELL">
+        🔄 Actualizar sistema contable
+        <input type="file" id="contable-inp" accept=".xlsx,.xls" style="display:none;" onchange="Catalog.importarSistemaContable(event)"/>
+      </label>
+      <button class="btn btn-outline btn-sm" onclick="abrirModalImagenesMasivas()">🖼️ Imágenes masivas</button>
+      <button class="btn btn-dark btn-sm" onclick="abrirNuevoProducto()">+ Nuevo</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body" style="padding:16px;">
+      <div class="search-box" style="margin-bottom:16px;">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="cat-search" placeholder="Filtrar catálogo..." oninput="renderCatalog(this.value)" style="width:100%;padding-left:38px;"/>
+      </div>
+      <div id="catalog-grid" class="catalog-grid"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ══ MODAL: IMAGEN ══════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-img">
+  <div class="modal" style="width:520px;">
+    <div class="modal-header">
+      <span id="img-modal-title">Imagen del Producto</span>
+      <button class="modal-close" onclick="cerrarModalImg()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="section-title">📋 Pegar pantallazo</div>
+      <div id="paste-zone" tabindex="0"
+           style="border:2px dashed var(--orange);border-radius:10px;background:#fff7f3;padding:20px;text-align:center;cursor:pointer;outline:none;min-height:90px;position:relative;"
+           onclick="this.focus()">
+        <div id="paste-instructions">
+          <div style="font-size:26px;margin-bottom:6px;">📋</div>
+          <div style="font-weight:700;color:var(--orange);font-size:13px;">Clic aquí → luego <kbd style="background:var(--dark);color:white;padding:2px 8px;border-radius:4px;">Ctrl+V</kbd></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:5px;">Captura: Win+Shift+S (Windows) · Cmd+Shift+4 (Mac)</div>
+        </div>
+        <div id="paste-preview" style="display:none;">
+          <img id="paste-img" style="max-height:120px;border-radius:8px;border:2px solid var(--success);object-fit:contain;" alt="">
+          <div style="color:var(--success);font-weight:700;font-size:12px;margin-top:6px;">✓ Imagen lista — clic en "Usar imagen"</div>
+        </div>
+      </div>
+
+      <div class="section-title">📁 Subir desde computador</div>
+      <div style="border:2px dashed var(--border);border-radius:10px;background:var(--light);padding:16px;text-align:center;cursor:pointer;"
+           id="file-zone" onclick="document.getElementById('file-inp').click()"
+           onmouseover="this.style.borderColor='var(--orange)';this.style.background='#fff7f3'"
+           onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--light)'">
+        <input type="file" id="file-inp" accept="image/*" style="display:none;" onchange="onFileImg(event)"/>
+        <div style="font-size:24px;margin-bottom:5px;">📂</div>
+        <div style="font-size:13px;font-weight:600;">Haz clic para seleccionar imagen</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;">JPG, PNG, WEBP · Máx 5MB</div>
+      </div>
+
+      <div class="section-title">🔍 Buscar imagen en internet</div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="img-q" placeholder="pulsoximetro adulto, tensiómetro welch allyn..." style="flex:1;"
+               onkeydown="if(event.key==='Enter')buscarImagen()"/>
+        <button class="btn btn-dark btn-sm" onclick="buscarImagen()">Buscar</button>
+      </div>
+      <div id="img-status" style="font-size:12px;color:var(--muted);min-height:18px;padding:3px 0;"></div>
+      <div id="img-grid" class="img-grid"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline btn-sm" onclick="cerrarModalImg()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="Catalog.confirmarImg()">✓ Usar imagen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: PRODUCTO ════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-prod">
+  <div class="modal" style="width:540px;">
+    <div class="modal-header">
+      <span id="prod-modal-title">Nuevo Producto</span>
+      <button class="modal-close" onclick="cerrarModalProd()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label>Nombre / Descripción</label><textarea id="prod-nombre" style="min-height:54px;" placeholder="Ej: PULSOXÍMETRO ADULTO"></textarea></div>
+
+      <div style="background:#f9f9f7;border-radius:8px;padding:12px;border:1px solid var(--border);margin-bottom:2px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;">Precios de venta</div>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;gap:10px;">
+          <div class="form-group"><label>Precio 1</label><input type="number" id="prod-precio" placeholder="0"/></div>
+          <div class="form-group"><label>Precio 2</label><input type="number" id="prod-precio2" placeholder="0"/></div>
+          <div class="form-group"><label>Precio 3</label><input type="number" id="prod-precio3" placeholder="0"/></div>
+        </div>
+      </div>
+
+      <div style="background:#fff8f0;border-radius:8px;padding:12px;border:1px solid #f5c89a;margin-bottom:2px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#c0692a;margin-bottom:8px;">Datos internos (no aparecen en el PDF)</div>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;gap:10px;">
+          <div class="form-group"><label>💰 Costo</label><input type="number" id="prod-costo" placeholder="0"/></div>
+          <div class="form-group"><label>IVA (%)</label><input type="number" id="prod-iva" placeholder="0" min="0" max="100"/></div>
+          <div class="form-group"><label>Saldo</label><input type="number" id="prod-saldo" placeholder="0" min="0"/></div>
+        </div>
+      </div>
+
+      <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group"><label>Marca</label><input type="text" id="prod-marca" placeholder="Ej: GMD, Welch Allyn..."/></div>
+        <div class="form-group">
+          <label>Referencia <span style="color:var(--orange);font-size:10px;">● único</span></label>
+          <input type="text" id="prod-ref" placeholder="Ej: PULSOX-ADU-LAT" style="font-family:monospace;text-transform:uppercase;" oninput="checkRefUnique()"/>
+          <span id="ref-status" style="font-size:11px;min-height:14px;display:block;"></span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline btn-sm" onclick="cerrarModalProd()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="Catalog.saveFromModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: NOTAS PDF ═══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-notes">
+  <div class="modal" style="width:500px;">
+    <div class="modal-header">
+      <span>📝 Notas del PDF</span>
+      <button class="modal-close" onclick="cerrarNotasPDF()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">
+        Estas notas aparecen en todas las cotizaciones PDF que generes.
+      </p>
+      <div id="pdf-notes-list"></div>
+      <button class="btn btn-outline btn-sm" style="margin-top:4px;" onclick="addNotaRow('', undefined)">+ Agregar nota</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline btn-sm" onclick="resetNotasPDF()">↺ Restaurar</button>
+      <button class="btn btn-outline btn-sm" onclick="cerrarNotasPDF()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="guardarNotasPDF()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: BRANDING PDF ═══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-brand">
+  <div class="modal" style="width:580px;max-width:96vw;">
+    <div class="modal-header">
+      <span>🖼️ Encabezado y Pie del PDF</span>
+      <button class="modal-close" onclick="cerrarBrand()">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:20px;">
+      <div>
+        <div class="section-title" style="margin-bottom:8px;">📄 Imagen de Encabezado <span style="font-size:10px;color:var(--muted);font-weight:400;">(recomendado 2100 × 330 px)</span></div>
+        <div id="brand-hdr-zone" style="border:2px dashed var(--orange);border-radius:10px;background:#fff7f3;cursor:pointer;overflow:hidden;min-height:80px;display:flex;align-items:center;justify-content:center;position:relative;"
+             onclick="document.getElementById('brand-hdr-inp').click()">
+          <input type="file" id="brand-hdr-inp" accept="image/*" style="display:none;" onchange="loadBrandImg('hdr',event)"/>
+          <div id="brand-hdr-placeholder" style="text-align:center;padding:18px;">
+            <div style="font-size:28px;">🏢</div>
+            <div style="font-weight:700;color:var(--orange);font-size:13px;margin-top:4px;">Clic para subir imagen de encabezado</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:3px;">JPG, PNG · Ancho completo · Máx 4MB</div>
+          </div>
+          <img id="brand-hdr-preview" style="display:none;width:100%;max-height:130px;object-fit:cover;border-radius:8px;" alt="Encabezado"/>
+          <button id="brand-hdr-clear" onclick="clearBrandImg(event,'hdr')"
+            style="display:none;position:absolute;top:6px;right:8px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:14px;line-height:1;">✕</button>
+        </div>
+      </div>
+      <div>
+        <div class="section-title" style="margin-bottom:8px;">📋 Imagen de Pie de Página <span style="font-size:10px;color:var(--muted);font-weight:400;">(recomendado 2100 × 220 px)</span></div>
+        <div id="brand-ftr-zone" style="border:2px dashed var(--border);border-radius:10px;background:var(--light);cursor:pointer;overflow:hidden;min-height:60px;display:flex;align-items:center;justify-content:center;position:relative;"
+             onclick="document.getElementById('brand-ftr-inp').click()">
+          <input type="file" id="brand-ftr-inp" accept="image/*" style="display:none;" onchange="loadBrandImg('ftr',event)"/>
+          <div id="brand-ftr-placeholder" style="text-align:center;padding:14px;">
+            <div style="font-size:24px;">🗂️</div>
+            <div style="font-weight:700;color:var(--muted);font-size:13px;margin-top:4px;">Clic para subir imagen de pie de página</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:3px;">JPG, PNG · Máx 4MB</div>
+          </div>
+          <img id="brand-ftr-preview" style="display:none;width:100%;max-height:90px;object-fit:cover;border-radius:8px;" alt="Pie de página"/>
+          <button id="brand-ftr-clear" onclick="clearBrandImg(event,'ftr')"
+            style="display:none;position:absolute;top:6px;right:8px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:14px;line-height:1;">✕</button>
+        </div>
+      </div>
+      <div style="background:var(--light);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted);line-height:1.7;">
+        <strong style="color:var(--text);">💡 Cómo funciona:</strong><br>
+        • Si subes una imagen de encabezado, <strong>reemplaza</strong> el header vectorial del PDF.<br>
+        • Si no subes imagen, el PDF usa el diseño predeterminado de ORTHOWELL.<br>
+        • Las imágenes se guardan en el navegador — solo se configuran una vez.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline btn-sm" onclick="cerrarBrand()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="guardarBrand()">✓ Guardar configuración</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: IMÁGENES MASIVAS ════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-img-masivas">
+  <div class="modal" style="width:620px;max-width:96vw;">
+    <div class="modal-header">
+      <span>🖼️ Carga Masiva de Imágenes</span>
+      <button class="modal-close" onclick="cerrarModalImagenesMasivas()">✕</button>
+    </div>
+    <div class="modal-body" style="gap:18px;">
+      <div style="background:var(--surface);border-radius:10px;padding:16px;border:1px solid var(--border-light);">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;">📦 Opción A — Cargar ZIP de imágenes</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+          Nombra cada imagen con la <strong>referencia del producto</strong>
+          (ej: <code style="background:#eee;padding:1px 5px;border-radius:3px;">18715N.jpg</code>).
+          Las imágenes se suben automáticamente a Google Drive.
+        </div>
+        <label class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-flex;">
+          📂 Seleccionar archivo ZIP
+          <input type="file" id="zip-inp" accept=".zip" style="display:none;" onchange="importarZIP(event)"/>
+        </label>
+        <div id="zip-status" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
+      </div>
+
+      <div style="background:var(--surface);border-radius:10px;padding:16px;border:1px solid var(--border-light);">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;">📋 Opción B — Importar URLs desde Excel</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+          Crea un Excel con columnas <strong>REFERENCIA</strong> e <strong>IMAGEN_URL</strong>.
+          <br><a href="#" onclick="Catalog.descargarPlantillaURLs();return false;" style="color:var(--orange);font-weight:600;">⬇️ Descargar plantilla Excel</a>
+        </div>
+        <label class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-flex;">
+          📋 Seleccionar Excel con URLs
+          <input type="file" id="url-excel-inp" accept=".xlsx,.xls,.csv" style="display:none;" onchange="Catalog.importarURLsExcel(event)"/>
+        </label>
+        <div id="url-status" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
+      </div>
+
+      <div style="background:var(--surface);border-radius:10px;padding:16px;border:1px solid var(--border-light);">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;">🔍 Opción C — Búsqueda automática por nombre</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+          Busca imágenes automáticamente para productos sin foto usando Wikimedia Commons.
+          Solo afecta productos <strong>sin imagen</strong>.
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="Catalog.iniciarBusquedaMasiva()">▶ Iniciar búsqueda automática</button>
+          <button class="btn btn-outline btn-sm" onclick="detenerBusquedaMasiva()" id="btn-stop-masiva" style="display:none;border-color:var(--danger);color:var(--danger);">⏹ Detener</button>
+          <span id="masiva-status" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+        <div id="masiva-progress" style="margin-top:10px;display:none;">
+          <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden;">
+            <div id="masiva-bar" style="height:100%;background:var(--orange);width:0%;transition:width .3s;border-radius:4px;"></div>
+          </div>
+          <div id="masiva-log" style="margin-top:8px;font-size:11px;color:var(--muted);max-height:80px;overflow-y:auto;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline btn-sm" onclick="cerrarModalImagenesMasivas()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TOAST ══ -->
+<div class="toast" id="toast"></div>
+
+<!-- ══ PWA INSTALL BANNER ══ -->
+<div id="pwa-banner">
+  📱 Instalar app en tu celular
+  <button id="btn-install-pwa">Instalar</button>
+  <button class="dismiss" id="btn-dismiss-pwa">✕</button>
+</div>
+
+<!-- ══ SCRIPTS (orden de carga importante) ══ -->
+<script src="./js/config.js"></script>
+<script src="./js/ui.js"></script>
+<script src="./js/auth.js"></script>
+<script src="./js/sync.js"></script>
+<script src="./js/catalog.js"></script>
+<script src="./js/cotizar.js"></script>
+<script src="./js/pdf.js"></script>
+<script src="./js/app.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generar íconos PWA</title></head>
+<body>
+<p>Ejecuta este archivo en el navegador para generar los íconos PNG de la PWA.</p>
+<canvas id="c192" width="192" height="192" style="border:1px solid #ccc;margin:8px;"></canvas>
+<canvas id="c512" width="512" height="512" style="border:1px solid #ccc;margin:8px;"></canvas>
+<br>
+<button onclick="generate()">Generar y descargar íconos</button>
+<script>
+function drawIcon(canvas, size) {
+  const ctx = canvas.getContext('2d');
+  const s = size;
+  const r = s * 0.18;
+
+  // Fondo oscuro
+  ctx.fillStyle = '#111318';
+  ctx.fillRect(0, 0, s, s);
+
+  // Caja naranja con bordes redondeados
+  const boxX = s * 0.15, boxY = s * 0.15, boxW = s * 0.7, boxH = s * 0.7;
+  ctx.beginPath();
+  ctx.moveTo(boxX + r, boxY);
+  ctx.lineTo(boxX + boxW - r, boxY);
+  ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + r);
+  ctx.lineTo(boxX + boxW, boxY + boxH - r);
+  ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - r, boxY + boxH);
+  ctx.lineTo(boxX + r, boxY + boxH);
+  ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - r);
+  ctx.lineTo(boxX, boxY + r);
+  ctx.quadraticCurveTo(boxX, boxY, boxX + r, boxY);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(boxX, boxY, boxX + boxW, boxY + boxH);
+  grad.addColorStop(0, '#F26522');
+  grad.addColorStop(1, '#e05010');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Texto "OW"
+  ctx.fillStyle = 'white';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold ${s * 0.28}px 'Arial Narrow', Arial, sans-serif`;
+  ctx.fillText('OW', s / 2, s / 2);
+}
+
+function generate() {
+  [192, 512].forEach(size => {
+    const c = document.getElementById('c' + size);
+    drawIcon(c, size);
+    const a = document.createElement('a');
+    a.download = `icon-${size}.png`;
+    a.href = c.toDataURL('image/png');
+    a.click();
+  });
+}
+
+// Auto-draw on load
+document.addEventListener('DOMContentLoaded', () => {
+  drawIcon(document.getElementById('c192'), 192);
+  drawIcon(document.getElementById('c512'), 512);
+});
+</script>
+</body>
+</html>
