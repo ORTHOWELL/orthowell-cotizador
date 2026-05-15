@@ -322,7 +322,15 @@ const Sync = (() => {
     try {
       setSyncStatus('syncing', 'Sincronizando...');
       const remote = await loadFromSheets();
-      if (remote !== null) {
+      const local = Catalog.getAll ? Catalog.getAll() : [];
+
+      if (remote !== null && remote.length === 0 && local.length > 0) {
+        // Sheets vacío pero hay datos locales → subir a Sheets
+        await saveCatalogToSheets(local);
+        toast(`✓ ${local.length} productos guardados en Sheets`, 'success');
+        setSyncStatus('', `✓ ${local.length} guardados`);
+      } else if (remote !== null && remote.length > 0) {
+        // Sheets tiene datos → bajar y actualizar local
         Catalog.setFromRemote(remote);
         renderCatalog(document.getElementById('cat-search')?.value || '');
         toast('✓ Catálogo sincronizado desde Sheets', 'success');
