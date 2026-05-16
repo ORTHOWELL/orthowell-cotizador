@@ -514,8 +514,8 @@ textarea { resize: vertical; min-height: 60px; }
   /* Layout principal en una columna */
   .two-col { grid-template-columns: 1fr; }
 
-  /* Form grid en una columna */
-  .form-grid { grid-template-columns: 1fr; }
+  /* Form grid en una columna — !important para sobrescribir estilos inline */
+  .form-grid { grid-template-columns: 1fr !important; }
 
   /* Inputs y selects al 100% */
   input, select, textarea { max-width: 100%; }
