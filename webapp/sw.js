@@ -21,6 +21,9 @@ const STATIC_ASSETS = [
   './js/pdf.js',
   './js/app.js',
   './manifest.json',
+  './icons/logo.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
 ];
 
 // CDN assets (jsPDF, SheetJS, Google Fonts)
