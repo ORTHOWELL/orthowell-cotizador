@@ -203,7 +203,10 @@ function renderItems() {
     '<td colspan="3">$' + fNum(total) + '</td>' +
     '</tr>';
   table.appendChild(tfoot);
-  c.innerHTML = ''; c.appendChild(table);
+  const wrap = document.createElement('div');
+  wrap.className = 'items-table-wrap';
+  wrap.appendChild(table);
+  c.innerHTML = ''; c.appendChild(wrap);
   updateSummary();
 }
 
