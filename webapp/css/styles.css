@@ -447,7 +447,7 @@ textarea { resize: vertical; min-height: 60px; }
 #pwa-banner .dismiss { background: none; border: 1px solid rgba(255,255,255,.2); color: #aaa; margin-left: 4px; }
 
 /* ── RESPONSIVE MÓVIL ── */
-@media (max-width: 600px) {
+@media (max-width: 768px) {
 
   /* Header compacto */
   header { padding: 0 14px; height: 52px; }
