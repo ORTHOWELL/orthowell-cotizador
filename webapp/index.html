@@ -66,10 +66,11 @@
       Sincronizar
     </button>
     <!-- Usuario -->
-    <div class="header-user" onclick="App.openProfileModal()" title="Mi perfil" style="cursor:pointer;">
+    <div class="header-user">
       <img id="user-avatar" src="" alt="" style="display:none;">
       <span id="user-name"></span>
     </div>
+    <button class="btn-perfil" onclick="App.openProfileModal()" title="Mi perfil · Datos para PDF">👤 Perfil</button>
     <button class="btn-admin" id="btn-admin-users" onclick="App.openUsersModal()" title="Gestionar usuarios" style="display:none;">👥</button>
     <button class="btn-logout" onclick="Auth.logout()" title="Cerrar sesión">Salir</button>
   </div>

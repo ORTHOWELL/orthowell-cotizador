@@ -446,6 +446,14 @@ textarea { resize: vertical; min-height: 60px; }
 #pwa-banner button { background: var(--orange); border: none; color: white; border-radius: 7px; padding: 6px 14px; font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 12px; cursor: pointer; }
 #pwa-banner .dismiss { background: none; border: 1px solid rgba(255,255,255,.2); color: #aaa; margin-left: 4px; }
 
+/* ── BOTÓN PERFIL ── */
+.btn-perfil {
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
+  color: #aaa; border-radius: 7px; padding: 5px 10px; font-size: 11px;
+  font-family: 'DM Sans', sans-serif; font-weight: 600; cursor: pointer; transition: all .15s;
+}
+.btn-perfil:hover { background: rgba(255,255,255,.15); color: white; }
+
 /* ── BOTÓN ADMIN ── */
 .btn-admin {
   background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
