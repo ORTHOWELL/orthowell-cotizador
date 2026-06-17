@@ -138,15 +138,20 @@ const Pdf = (() => {
           const fmt = brand.ftr.includes('data:image/png') ? 'PNG' : 'JPEG';
           doc.addImage(brand.ftr, fmt, 0, H-ftrH, W, ftrH);
         } else {
+          const p = (typeof App !== 'undefined') ? App.getProfile() : null;
+          const vendNombre = p?.nombre  || 'Andres Felipe Ortega Bravo';
+          const vendCargo  = p?.cargo   || 'Gerente Comercial y de Proyectos';
+          const vendTel    = p?.telefono || '+57 310 377 5719';
+          const vendEmail  = p?.emailVendedor || 'andres.ortega@orthowell.com.co';
           doc.setFillColor(...OR); doc.rect(0,H-18,W,18,'F');
           doc.setTextColor(...WH); doc.setFont('helvetica','bold'); doc.setFontSize(9);
-          doc.text('Andres Felipe Ortega Bravo',ML+2,H-11);
+          doc.text(vendNombre,ML+2,H-11);
           doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
-          doc.text('Gerente Comercial y de Proyectos',ML+2,H-6.5);
+          doc.text(vendCargo,ML+2,H-6.5);
           doc.setFont('helvetica','bold'); doc.setFontSize(8);
-          doc.text('+57 310 377 5719',W/2,H-11,{align:'center'});
+          doc.text(vendTel,W/2,H-11,{align:'center'});
           doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
-          doc.text('andres.ortega@orthowell.com.co',W/2,H-6.5,{align:'center'});
+          doc.text(vendEmail,W/2,H-6.5,{align:'center'});
         }
       }
 
@@ -157,7 +162,8 @@ const Pdf = (() => {
         doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...DK);
         doc.text('Notas:',ML+3,bY+6);
         doc.setFont('helvetica','normal'); doc.setFontSize(7.2);
-        const savedNotes = loadNotes();
+        const p = (typeof App !== 'undefined') ? App.getProfile() : null;
+        const savedNotes = p?.notas || loadNotes();
         const nl = savedNotes.map(n => '• ' + n);
         nl.push(`• Validez de la oferta: ${validez}.`);
         if (notas) nl.push('• '+notas);

@@ -344,6 +344,122 @@ const Sync = (() => {
     }
   }
 
+  // ── USUARIOS ─────────────────────────────────────────────────────
+  async function checkUserAccess(email, nombre) {
+    try {
+      const token = await Auth.ensureToken();
+      const r = await fetch(
+        `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.USERS_SHEET}!A:D`,
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      if (!r.ok) {
+        // Hoja no existe → crear y registrar como admin
+        await _initUsersSheet(email, nombre, token);
+        return { allowed: true, rol: 'admin' };
+      }
+      const data = await r.json();
+      const rows = (data.values || []).slice(1);
+      const userRow = rows.find(row => (row[0]||'').toLowerCase() === email.toLowerCase());
+      if (!userRow) {
+        await _appendUser(email, nombre, 'vendedor', 'FALSE', token);
+        return { allowed: false, message: 'Acceso pendiente de aprobación. Contacta al administrador.' };
+      }
+      if ((userRow[3]||'').toUpperCase() !== 'TRUE') {
+        return { allowed: false, message: 'Tu acceso no está activo. Contacta al administrador.' };
+      }
+      return { allowed: true, rol: userRow[2] || 'vendedor' };
+    } catch(e) {
+      return { allowed: true, rol: 'vendedor' }; // Si falla, permitir acceso
+    }
+  }
+
+  async function _initUsersSheet(email, nombre, token) {
+    await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}:batchUpdate`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: CONFIG.USERS_SHEET } } }] })
+    }).catch(() => {});
+    await fetch(
+      `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.USERS_SHEET}!A1?valueInputOption=RAW`,
+      { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [['EMAIL','NOMBRE','ROL','ACTIVO'], [email, nombre, 'admin', 'TRUE']] }) }
+    );
+  }
+
+  async function _appendUser(email, nombre, rol, activo, token) {
+    await fetch(
+      `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.USERS_SHEET}!A:D:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [[email, nombre, rol, activo]] }) }
+    );
+  }
+
+  async function loadUsers() {
+    const token = await Auth.ensureToken();
+    const r = await fetch(
+      `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.USERS_SHEET}!A:D`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (!r.ok) return [];
+    const data = await r.json();
+    return (data.values || []).slice(1)
+      .filter(r => r[0])
+      .map(r => ({ email: r[0]||'', nombre: r[1]||'', rol: r[2]||'vendedor', activo: (r[3]||'').toUpperCase()==='TRUE' }));
+  }
+
+  async function saveUsers(users) {
+    const token = await Auth.ensureToken();
+    const rows = [['EMAIL','NOMBRE','ROL','ACTIVO'], ...users.map(u => [u.email, u.nombre, u.rol, u.activo?'TRUE':'FALSE'])];
+    await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.USERS_SHEET}:clear`,
+      { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    await fetch(
+      `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.USERS_SHEET}!A1?valueInputOption=RAW`,
+      { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: rows }) }
+    );
+  }
+
+  // ── PERFILES DE VENDEDOR ──────────────────────────────────────────
+  async function loadProfile(email) {
+    try {
+      const token = await Auth.ensureToken();
+      const r = await fetch(
+        `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}!A:F`,
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      if (!r.ok) return null;
+      const data = await r.json();
+      const rows = (data.values || []).slice(1);
+      const row = rows.find(r => (r[0]||'').toLowerCase() === email.toLowerCase());
+      if (!row) return null;
+      return { email: row[0]||'', nombre: row[1]||'', cargo: row[2]||'', telefono: row[3]||'', emailVendedor: row[4]||'', notas: row[5] ? JSON.parse(row[5]) : null };
+    } catch(e) { return null; }
+  }
+
+  async function saveProfile(profile) {
+    const token = await Auth.ensureToken();
+    // Crear hoja si no existe
+    await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}:batchUpdate`, {
+      method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: CONFIG.PROFILES_SHEET } } }] })
+    }).catch(() => {});
+    // Leer filas actuales
+    const rAll = await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}!A:F`, { headers: { Authorization: 'Bearer ' + token } });
+    const allData = rAll.ok ? await rAll.json() : { values: [] };
+    const rows = allData.values || [];
+    if (!rows.length) rows.push(['EMAIL','NOMBRE','CARGO','TELEFONO','EMAIL_VENDEDOR','NOTAS']);
+    const idx = rows.findIndex((r, i) => i > 0 && (r[0]||'').toLowerCase() === profile.email.toLowerCase());
+    const row = [profile.email, profile.nombre||'', profile.cargo||'', profile.telefono||'', profile.emailVendedor||'', profile.notas ? JSON.stringify(profile.notas) : ''];
+    if (idx >= 0) rows[idx] = row; else rows.push(row);
+    await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}:clear`,
+      { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    await fetch(
+      `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}!A1?valueInputOption=RAW`,
+      { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: rows }) }
+    );
+  }
+
   return {
     initSheet,
     loadFromSheets,
@@ -355,5 +471,10 @@ const Sync = (() => {
     startAutoSync,
     stopAutoSync,
     syncNow,
+    checkUserAccess,
+    loadUsers,
+    saveUsers,
+    loadProfile,
+    saveProfile,
   };
 })();

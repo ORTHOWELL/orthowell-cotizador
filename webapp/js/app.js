@@ -3,6 +3,8 @@
  */
 
 const App = (() => {
+  let _rol = 'vendedor';
+  let _profile = null;
 
   // ── INIT (carga inicial de la página) ────────────────────────────
   async function init() {
@@ -82,6 +84,28 @@ const App = (() => {
 
   // ── AFTER AUTH (después de login exitoso) ────────────────────────
   async function afterAuth() {
+    const user = Auth.getUser();
+    const email = user?.email || '';
+    const nombre = user?.name || email;
+
+    // Verificar acceso del usuario
+    const access = await Sync.checkUserAccess(email, nombre);
+    if (!access.allowed) {
+      toast(access.message, 'error');
+      setTimeout(() => Auth.logout(), 3000);
+      document.getElementById('auth-error').textContent = access.message;
+      document.getElementById('auth-overlay').classList.remove('hidden');
+      return;
+    }
+    _rol = access.rol;
+
+    // Mostrar/ocultar botón de admin
+    const btnAdmin = document.getElementById('btn-admin-users');
+    if (btnAdmin) btnAdmin.style.display = _rol === 'admin' ? '' : 'none';
+
+    // Cargar perfil del vendedor
+    _profile = await Sync.loadProfile(email);
+
     // Inicializar el Sheet si no existe
     await Sync.initSheet().catch(() => {});
 
@@ -208,13 +232,101 @@ const App = (() => {
 
   // ── ON LOGOUT ─────────────────────────────────────────────────────
   function onLogout() {
+    _rol = 'vendedor'; _profile = null;
     Sync.stopAutoSync();
     window._cotItems = [];
     renderItems();
     updateSummary();
   }
 
-  return { init, afterAuth, onLogout };
+  // ── USUARIOS (modal admin) ────────────────────────────────────────
+  async function openUsersModal() {
+    if (_rol !== 'admin') return;
+    const modal = document.getElementById('modal-usuarios');
+    modal.classList.add('open');
+    document.getElementById('users-list').innerHTML = '<div style="padding:16px;color:var(--muted);">Cargando...</div>';
+    try {
+      const users = await Sync.loadUsers();
+      _renderUsersList(users);
+    } catch(e) {
+      document.getElementById('users-list').innerHTML = '<div style="padding:16px;color:var(--danger);">Error al cargar usuarios</div>';
+    }
+  }
+
+  function _renderUsersList(users) {
+    const el = document.getElementById('users-list');
+    if (!users.length) { el.innerHTML = '<div style="padding:16px;color:var(--muted);">No hay usuarios registrados.</div>'; return; }
+    el.innerHTML = users.map((u, i) => `
+      <div class="user-row">
+        <div class="user-info">
+          <div class="user-email">${escH(u.email)}</div>
+          <div class="user-name">${escH(u.nombre)}</div>
+        </div>
+        <select class="user-rol-sel" data-idx="${i}" onchange="App._changeUser(${i},'rol',this.value)">
+          <option value="vendedor" ${u.rol==='vendedor'?'selected':''}>Vendedor</option>
+          <option value="admin" ${u.rol==='admin'?'selected':''}>Admin</option>
+        </select>
+        <label class="toggle-wrap" title="${u.activo?'Desactivar':'Activar'}">
+          <input type="checkbox" ${u.activo?'checked':''} onchange="App._changeUser(${i},'activo',this.checked)" data-idx="${i}">
+          <span class="toggle-label">${u.activo?'Activo':'Inactivo'}</span>
+        </label>
+      </div>`).join('');
+    el.dataset.users = JSON.stringify(users);
+  }
+
+  function _changeUser(idx, field, value) {
+    const el = document.getElementById('users-list');
+    const users = JSON.parse(el.dataset.users || '[]');
+    if (!users[idx]) return;
+    users[idx][field] = value;
+    el.dataset.users = JSON.stringify(users);
+    // Guardar inmediatamente
+    Sync.saveUsers(users)
+      .then(() => toast('✓ Usuario actualizado', 'success'))
+      .catch(() => toast('Error al guardar', 'error'));
+  }
+
+  // ── PERFIL DEL VENDEDOR ───────────────────────────────────────────
+  function openProfileModal() {
+    const email = Auth.getUser()?.email || '';
+    const p = _profile || {};
+    document.getElementById('prf-nombre').value    = p.nombre    || Auth.getUser()?.name || '';
+    document.getElementById('prf-cargo').value     = p.cargo     || '';
+    document.getElementById('prf-telefono').value  = p.telefono  || '';
+    document.getElementById('prf-email').value     = p.emailVendedor || email;
+    // Notas
+    const notas = p.notas || Pdf.loadNotes();
+    document.getElementById('prf-notas').value = notas.join('\n');
+    document.getElementById('modal-perfil').classList.add('open');
+  }
+
+  async function saveProfile() {
+    const email = Auth.getUser()?.email || '';
+    const notas = document.getElementById('prf-notas').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    _profile = {
+      email,
+      nombre:        document.getElementById('prf-nombre').value.trim(),
+      cargo:         document.getElementById('prf-cargo').value.trim(),
+      telefono:      document.getElementById('prf-telefono').value.trim(),
+      emailVendedor: document.getElementById('prf-email').value.trim(),
+      notas,
+    };
+    try {
+      await Sync.saveProfile(_profile);
+      toast('✓ Perfil guardado', 'success');
+      document.getElementById('modal-perfil').classList.remove('open');
+    } catch(e) {
+      toast('Error al guardar perfil: ' + e.message, 'error');
+    }
+  }
+
+  return {
+    init, afterAuth, onLogout,
+    openUsersModal, _changeUser,
+    openProfileModal, saveProfile,
+    getProfile: () => _profile,
+    getRol: () => _rol,
+  };
 })();
 
 // ── FUNCIONES GLOBALES REQUERIDAS POR EL HTML ─────────────────────

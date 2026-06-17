@@ -19,8 +19,10 @@ const CONFIG = {
   // Ejemplo URL: https://docs.google.com/spreadsheets/d/  <<ESTE_ES_EL_ID>>  /edit
   SPREADSHEET_ID: '1FIgB1QmUlG99BazJDuqwYtAtKt2dbHOSlX5MiXkcvh8',
 
-  // Nombre de la pestaña donde se guarda el catálogo
-  SHEET_NAME: 'Catalogo',
+  // Nombres de pestañas en Google Sheets
+  SHEET_NAME:    'Catalogo',
+  USERS_SHEET:   'Usuarios',
+  PROFILES_SHEET:'Perfiles',
 
   // ─── GOOGLE DRIVE ───────────────────────────────────────────
   // Nombre de la carpeta que se creará automáticamente en tu Drive

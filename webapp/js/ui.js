@@ -217,24 +217,56 @@ function compressAndSet(file, callback) {
 
 // Convert a URL to base64 (for PDF images from Drive)
 async function urlToBase64(url) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const MAX = 500;
-      let w = img.width, h = img.height;
-      if (w > MAX || h > MAX) {
-        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-        else { w = Math.round(w * MAX / h); h = MAX; }
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', 0.75));
-    };
-    img.onerror = reject;
-    img.src = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
-  });
+  // Usar fetch para evitar problemas de CORS con Drive/lh3.googleusercontent.com
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const blob = await resp.blob();
+    const b64 = await new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onloadend = () => res(reader.result);
+      reader.onerror = rej;
+      reader.readAsDataURL(blob);
+    });
+    // Redimensionar via canvas
+    return await new Promise((res) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 500;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        res(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.onerror = () => res(b64); // fallback: devolver blob sin redimensionar
+      img.src = b64;
+    });
+  } catch(e) {
+    // Fallback: img element con crossOrigin
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const MAX = 500;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
 }
 
 // ── IMAGE SEARCH (Wikipedia/Wikimedia Commons) ──────────────────────

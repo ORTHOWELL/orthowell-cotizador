@@ -446,6 +446,28 @@ textarea { resize: vertical; min-height: 60px; }
 #pwa-banner button { background: var(--orange); border: none; color: white; border-radius: 7px; padding: 6px 14px; font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 12px; cursor: pointer; }
 #pwa-banner .dismiss { background: none; border: 1px solid rgba(255,255,255,.2); color: #aaa; margin-left: 4px; }
 
+/* ── BOTÓN ADMIN ── */
+.btn-admin {
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
+  color: #aaa; border-radius: 7px; padding: 5px 10px; font-size: 14px;
+  cursor: pointer; transition: all .15s;
+}
+.btn-admin:hover { background: rgba(255,255,255,.15); color: white; }
+
+/* ── LISTA DE USUARIOS ── */
+.user-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border-light);
+}
+.user-row:last-child { border-bottom: none; }
+.user-info { flex: 1; min-width: 0; }
+.user-email { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-name  { font-size: 11px; color: var(--muted); }
+.user-rol-sel { border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-size: 12px; background: var(--white); color: var(--text); cursor: pointer; }
+.toggle-wrap { display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
+.toggle-wrap input { accent-color: var(--success); width: 16px; height: 16px; cursor: pointer; }
+.toggle-label { font-size: 12px; color: var(--muted); }
+
 /* ── RESPONSIVE MÓVIL ── */
 @media (max-width: 768px) {
 

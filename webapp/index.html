@@ -66,10 +66,11 @@
       Sincronizar
     </button>
     <!-- Usuario -->
-    <div class="header-user">
+    <div class="header-user" onclick="App.openProfileModal()" title="Mi perfil" style="cursor:pointer;">
       <img id="user-avatar" src="" alt="" style="display:none;">
       <span id="user-name"></span>
     </div>
+    <button class="btn-admin" id="btn-admin-users" onclick="App.openUsersModal()" title="Gestionar usuarios" style="display:none;">👥</button>
     <button class="btn-logout" onclick="Auth.logout()" title="Cerrar sesión">Salir</button>
   </div>
 </header>
@@ -504,6 +505,61 @@
   📱 Instalar app en tu celular
   <button id="btn-install-pwa">Instalar</button>
   <button class="dismiss" id="btn-dismiss-pwa">✕</button>
+</div>
+
+<!-- ══ MODAL: GESTIÓN DE USUARIOS (solo admin) ══ -->
+<div class="modal-overlay" id="modal-usuarios" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal-box" style="max-width:560px;">
+    <div class="modal-header">
+      <span>👥 Gestión de Usuarios</span>
+      <button class="modal-close" onclick="document.getElementById('modal-usuarios').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0;">
+      <div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border-light);font-size:12px;color:var(--muted);">
+        Los usuarios se registran automáticamente al iniciar sesión. Actívalos para darles acceso.
+      </div>
+      <div id="users-list" style="padding:8px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: MI PERFIL / DATOS DEL VENDEDOR ══ -->
+<div class="modal-overlay" id="modal-perfil" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal-box" style="max-width:480px;">
+    <div class="modal-header">
+      <span>👤 Mi Perfil — Datos para cotizaciones</span>
+      <button class="modal-close" onclick="document.getElementById('modal-perfil').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Estos datos aparecen en el pie de página de cada cotización PDF que generes.</div>
+      <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group full" style="grid-column:1/-1;">
+          <label>Nombre completo</label>
+          <input type="text" id="prf-nombre" placeholder="Tu nombre completo">
+        </div>
+        <div class="form-group">
+          <label>Cargo</label>
+          <input type="text" id="prf-cargo" placeholder="Ej: Asesor Comercial">
+        </div>
+        <div class="form-group">
+          <label>Teléfono</label>
+          <input type="text" id="prf-telefono" placeholder="+57 300 000 0000">
+        </div>
+        <div class="form-group full" style="grid-column:1/-1;">
+          <label>Email de contacto</label>
+          <input type="email" id="prf-email" placeholder="tu@orthowell.com.co">
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:12px;">
+        <label>Notas en el PDF <span style="font-weight:400;color:var(--muted);">(una por línea)</span></label>
+        <textarea id="prf-notas" rows="5" style="width:100%;resize:vertical;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:inherit;" placeholder="VALORES INCLUIDOS IVA.&#10;Tiempo de entregas en días hábiles."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="App.saveProfile()">Guardar perfil</button>
+      <button class="btn btn-outline" onclick="document.getElementById('modal-perfil').classList.remove('open')">Cancelar</button>
+    </div>
+  </div>
 </div>
 
 <!-- ══ SCRIPTS (orden de carga importante) ══ -->
