@@ -331,7 +331,6 @@ const App = (() => {
 
 // ── FUNCIONES GLOBALES REQUERIDAS POR EL HTML ─────────────────────
 function generarPDF()    { Pdf.generarPDF(); }
-function guardarBrand()  { /* delegado a ui.js */ }
 
 // Iniciar app cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', () => App.init());
