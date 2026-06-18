@@ -3,9 +3,9 @@
  * Estrategia: Cache-first para assets estáticos, Network-first para APIs Google.
  */
 
-const CACHE_NAME    = 'orthowell-v2.3';
-const CDN_CACHE     = 'orthowell-cdn-v2.3';
-const IMAGES_CACHE  = 'orthowell-images-v2.3';
+const CACHE_NAME    = 'orthowell-v2.4';
+const CDN_CACHE     = 'orthowell-cdn-v2.4';
+const IMAGES_CACHE  = 'orthowell-images-v2.4';
 
 // Assets del app shell que se cachean en la instalación
 const STATIC_ASSETS = [

@@ -381,6 +381,6 @@ function consultaAgregarCot(id) {
   if (!p) return;
   const ex = window._cotItems.find(i => i.nombre === p.nombre);
   if (ex) ex.cant++;
-  else window._cotItems.push({ nombre: p.nombre, cant: 1, precio: p.precio||0, obs: '', imageUrl: p.imageUrl||'' });
+  else window._cotItems.push({ nombre: p.nombre, cant: 1, precio: p.precio||0, obs: '', imageUrl: p.imageUrl||'', driveFileId: p.driveFileId||'' });
   toast(`✓ "${p.nombre.substring(0,30)}..." agregado a la cotización`, 'success');
 }

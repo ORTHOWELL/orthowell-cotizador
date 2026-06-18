@@ -424,7 +424,7 @@ const Sync = (() => {
     try {
       const token = await Auth.ensureToken();
       const r = await fetch(
-        `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}!A:F`,
+        `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}!A:G`,
         { headers: { Authorization: 'Bearer ' + token } }
       );
       if (!r.ok) return null;
@@ -444,10 +444,10 @@ const Sync = (() => {
       body: JSON.stringify({ requests: [{ addSheet: { properties: { title: CONFIG.PROFILES_SHEET } } }] })
     }).catch(() => {});
     // Leer filas actuales
-    const rAll = await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}!A:F`, { headers: { Authorization: 'Bearer ' + token } });
+    const rAll = await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}!A:G`, { headers: { Authorization: 'Bearer ' + token } });
     const allData = rAll.ok ? await rAll.json() : { values: [] };
     const rows = allData.values || [];
-    if (!rows.length) rows.push(['EMAIL','NOMBRE','CARGO','TELEFONO','EMAIL_VENDEDOR','NOTAS']);
+    if (!rows.length) rows.push(['EMAIL','NOMBRE','CARGO','TELEFONO','EMAIL_VENDEDOR','NOTAS','BANCO']);
     const idx = rows.findIndex((r, i) => i > 0 && (r[0]||'').toLowerCase() === profile.email.toLowerCase());
     const row = [profile.email, profile.nombre||'', profile.cargo||'', profile.telefono||'', profile.emailVendedor||'', profile.notas ? JSON.stringify(profile.notas) : '', profile.banco||''];
     if (idx >= 0) rows[idx] = row; else rows.push(row);

@@ -121,8 +121,20 @@ const Pdf = (() => {
 
       const OR=[242,101,34], DK=[26,26,26], WH=[255,255,255], LG=[245,245,240], BD=[220,215,208];
       const total = window._cotItems.reduce((s,i) => s+i.cant*i.precio, 0);
+
+      // Pre-calcular lista de notas para determinar altura dinámica del recuadro
+      const LINE_H=4.2, NOTE_START=12, BANK_GAP=4, BANK_H=6, BOX_PAD=3;
+      const _p = (typeof App !== 'undefined') ? App.getProfile() : null;
+      const _savedNotes = _p?.notas || loadNotes();
+      const nl = _savedNotes.map(n => '• ' + n);
+      nl.push(`• Validez de la oferta: ${validez}.`);
+      if (notas) nl.push('• ' + notas);
+      const boxH = NOTE_START + nl.length * LINE_H + BANK_GAP + BANK_H + BOX_PAD;
+
       let y=0, pageNum=1;
-      const ROW_H=14, FOOT_RESERVE=46, PAGE_BOTTOM=H-FOOT_RESERVE;
+      // FOOT_RESERVE = boxH + 4 (gap encima) + 18 (footer) + 2 (gap debajo)
+      // Esto garantiza que el recuadro de notas nunca solape el footer
+      const ROW_H=14, FOOT_RESERVE=boxH+24, PAGE_BOTTOM=H-FOOT_RESERVE;
       const cols=[12,10,62,12,24,24,CW-12-10-62-12-24-24];
 
       function hdr() {
@@ -202,19 +214,7 @@ const Pdf = (() => {
       }
 
       function notesTotal() {
-        const p = (typeof App !== 'undefined') ? App.getProfile() : null;
-        const savedNotes = p?.notas || loadNotes();
-        const nl = savedNotes.map(n => '• ' + n);
-        nl.push(`• Validez de la oferta: ${validez}.`);
-        if (notas) nl.push('• ' + notas);
-
-        const LINE_H = 4.2;
-        const NOTE_START = 12;  // distancia desde bY al inicio de la primera nota
-        const BANK_GAP = 4;     // espacio entre última nota y datos bancarios
-        const BANK_H = 6;       // altura del texto bancario
-        const BOX_PAD = 3;      // padding inferior del recuadro
-        const boxH = NOTE_START + nl.length * LINE_H + BANK_GAP + BANK_H + BOX_PAD;
-
+        // nl, boxH, LINE_H, NOTE_START, BANK_GAP vienen del scope externo (pre-calculados)
         const bY = y + 4;
         doc.setFillColor(...LG); doc.roundedRect(ML,bY,CW*0.62,boxH,2,2,'F');
         doc.setDrawColor(...BD); doc.roundedRect(ML,bY,CW*0.62,boxH,2,2,'S');
@@ -223,10 +223,9 @@ const Pdf = (() => {
         doc.setFont('helvetica','normal'); doc.setFontSize(7.2);
         nl.forEach((l,i) => doc.text(l,ML+3,bY+NOTE_START+i*LINE_H));
 
-        // Datos bancarios siempre debajo de la última nota
         const bankY = bY + NOTE_START + nl.length * LINE_H + BANK_GAP;
         doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(110,110,110);
-        const banco = p?.banco || 'Cta. Ahorros N° 203 090 634 · Banco AV Villas · Titular: ORTHOWELL SAS';
+        const banco = _p?.banco || 'Cta. Ahorros N° 203 090 634 · Banco AV Villas · Titular: ORTHOWELL SAS';
         doc.text(banco, ML+3, bankY);
 
         const tx=ML+CW*0.64, tW=CW*0.36;
