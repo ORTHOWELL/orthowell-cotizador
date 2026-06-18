@@ -297,6 +297,7 @@ const App = (() => {
     // Notas
     const notas = p.notas || Pdf.loadNotes();
     document.getElementById('prf-notas').value = notas.join('\n');
+    document.getElementById('prf-banco').value = p.banco || '';
     document.getElementById('modal-perfil').classList.add('open');
   }
 
@@ -310,6 +311,7 @@ const App = (() => {
       telefono:      document.getElementById('prf-telefono').value.trim(),
       emailVendedor: document.getElementById('prf-email').value.trim(),
       notas,
+      banco: document.getElementById('prf-banco').value.trim(),
     };
     try {
       await Sync.saveProfile(_profile);

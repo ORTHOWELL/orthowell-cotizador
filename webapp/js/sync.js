@@ -432,7 +432,7 @@ const Sync = (() => {
       const rows = (data.values || []).slice(1);
       const row = rows.find(r => (r[0]||'').toLowerCase() === email.toLowerCase());
       if (!row) return null;
-      return { email: row[0]||'', nombre: row[1]||'', cargo: row[2]||'', telefono: row[3]||'', emailVendedor: row[4]||'', notas: row[5] ? JSON.parse(row[5]) : null };
+      return { email: row[0]||'', nombre: row[1]||'', cargo: row[2]||'', telefono: row[3]||'', emailVendedor: row[4]||'', notas: row[5] ? JSON.parse(row[5]) : null, banco: row[6]||'' };
     } catch(e) { return null; }
   }
 
@@ -449,7 +449,7 @@ const Sync = (() => {
     const rows = allData.values || [];
     if (!rows.length) rows.push(['EMAIL','NOMBRE','CARGO','TELEFONO','EMAIL_VENDEDOR','NOTAS']);
     const idx = rows.findIndex((r, i) => i > 0 && (r[0]||'').toLowerCase() === profile.email.toLowerCase());
-    const row = [profile.email, profile.nombre||'', profile.cargo||'', profile.telefono||'', profile.emailVendedor||'', profile.notas ? JSON.stringify(profile.notas) : ''];
+    const row = [profile.email, profile.nombre||'', profile.cargo||'', profile.telefono||'', profile.emailVendedor||'', profile.notas ? JSON.stringify(profile.notas) : '', profile.banco||''];
     if (idx >= 0) rows[idx] = row; else rows.push(row);
     await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}:clear`,
       { method: 'POST', headers: { Authorization: 'Bearer ' + token } });

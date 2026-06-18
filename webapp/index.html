@@ -555,6 +555,10 @@
         <label>Notas en el PDF <span style="font-weight:400;color:var(--muted);">(una por línea)</span></label>
         <textarea id="prf-notas" rows="5" style="width:100%;resize:vertical;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:inherit;" placeholder="VALORES INCLUIDOS IVA.&#10;Tiempo de entregas en días hábiles."></textarea>
       </div>
+      <div class="form-group" style="margin-top:12px;">
+        <label>Datos bancarios <span style="font-weight:400;color:var(--muted);">(aparece bajo las notas)</span></label>
+        <input type="text" id="prf-banco" placeholder="Cta. Ahorros N° 000 000 000 · Banco XX · Titular: EMPRESA SAS">
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-primary" onclick="App.saveProfile()">Guardar perfil</button>

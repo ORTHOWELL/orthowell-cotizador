@@ -211,7 +211,8 @@ const Pdf = (() => {
         if (notas) nl.push('• '+notas);
         nl.forEach((l,i) => doc.text(l,ML+3,bY+12+i*4.2));
         doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(110,110,110);
-        doc.text('Cta. Ahorros N° 203 090 634 · Banco AV Villas · Titular: ORTHOWELL SAS',ML+3,bY+37);
+        const banco = p?.banco || 'Cta. Ahorros N° 203 090 634 · Banco AV Villas · Titular: ORTHOWELL SAS';
+        doc.text(banco, ML+3, bY+37);
         const tx=ML+CW*0.64, tW=CW*0.36;
         doc.setFillColor(...DK); doc.roundedRect(tx,bY,tW,18,2,2,'F');
         doc.setTextColor(...WH); doc.setFont('helvetica','bold'); doc.setFontSize(8);
