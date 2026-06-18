@@ -32,12 +32,54 @@ const Pdf = (() => {
     localStorage.setItem(CONFIG.BRAND_KEY, JSON.stringify({hdr, ftr}));
   }
 
+  // ── DESCARGAR IMAGEN DESDE DRIVE CON TOKEN (evita CORS) ──────────
+  async function _downloadDriveImg(fileId) {
+    const token = await Auth.ensureToken();
+    const resp = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (!resp.ok) throw new Error('Drive ' + resp.status);
+    const blob = await resp.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const b64 = reader.result;
+        const img = new Image();
+        img.onload = () => {
+          const MAX = 500;
+          let w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+            else { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.75));
+        };
+        img.onerror = () => resolve(b64);
+        img.src = b64;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
   // ── PRE-CARGAR IMÁGENES DE DRIVE PARA EL PDF ─────────────────────
   async function preloadImagesForPDF(items) {
     for (const item of items) {
-      if (!item.imageUrl || item.imageUrl.startsWith('data:image')) continue;
+      if (item.imageUrl?.startsWith('data:image')) {
+        item._pdfImg = item.imageUrl;
+        continue;
+      }
+      if (!item.driveFileId && !item.imageUrl) continue;
       try {
-        item._pdfImg = await urlToBase64(item.imageUrl);
+        if (item.driveFileId) {
+          item._pdfImg = await _downloadDriveImg(item.driveFileId);
+        } else {
+          item._pdfImg = await urlToBase64(item.imageUrl);
+        }
       } catch(e) {
         item._pdfImg = '';
       }
