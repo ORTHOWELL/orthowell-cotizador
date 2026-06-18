@@ -20,16 +20,20 @@ const Pdf = (() => {
     localStorage.setItem(CONFIG.NOTES_KEY, JSON.stringify(notes));
   }
 
-  // ── BRANDING PDF ─────────────────────────────────────────────────
+  // ── BRANDING PDF (por usuario) ────────────────────────────────────
+  function _brandKey() {
+    const email = (typeof Auth !== 'undefined') ? Auth.getUser()?.email : null;
+    return email ? 'ow_brand_' + email : CONFIG.BRAND_KEY;
+  }
   function loadBrand() {
     try {
-      const saved = localStorage.getItem(CONFIG.BRAND_KEY);
+      const saved = localStorage.getItem(_brandKey()) || localStorage.getItem(CONFIG.BRAND_KEY);
       if (saved) { const d = JSON.parse(saved); return {hdr: d.hdr||null, ftr: d.ftr||null}; }
     } catch(e) {}
     return {hdr: null, ftr: null};
   }
   function saveBrand(hdr, ftr) {
-    localStorage.setItem(CONFIG.BRAND_KEY, JSON.stringify({hdr, ftr}));
+    localStorage.setItem(_brandKey(), JSON.stringify({hdr, ftr}));
   }
 
   // ── DESCARGAR IMAGEN DESDE DRIVE CON TOKEN (evita CORS) ──────────
@@ -198,21 +202,33 @@ const Pdf = (() => {
       }
 
       function notesTotal() {
-        const bY=y+4;
-        doc.setFillColor(...LG); doc.roundedRect(ML,bY,CW*0.62,30,2,2,'F');
-        doc.setDrawColor(...BD); doc.roundedRect(ML,bY,CW*0.62,30,2,2,'S');
-        doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...DK);
-        doc.text('Notas:',ML+3,bY+6);
-        doc.setFont('helvetica','normal'); doc.setFontSize(7.2);
         const p = (typeof App !== 'undefined') ? App.getProfile() : null;
         const savedNotes = p?.notas || loadNotes();
         const nl = savedNotes.map(n => '• ' + n);
         nl.push(`• Validez de la oferta: ${validez}.`);
-        if (notas) nl.push('• '+notas);
-        nl.forEach((l,i) => doc.text(l,ML+3,bY+12+i*4.2));
+        if (notas) nl.push('• ' + notas);
+
+        const LINE_H = 4.2;
+        const NOTE_START = 12;  // distancia desde bY al inicio de la primera nota
+        const BANK_GAP = 4;     // espacio entre última nota y datos bancarios
+        const BANK_H = 6;       // altura del texto bancario
+        const BOX_PAD = 3;      // padding inferior del recuadro
+        const boxH = NOTE_START + nl.length * LINE_H + BANK_GAP + BANK_H + BOX_PAD;
+
+        const bY = y + 4;
+        doc.setFillColor(...LG); doc.roundedRect(ML,bY,CW*0.62,boxH,2,2,'F');
+        doc.setDrawColor(...BD); doc.roundedRect(ML,bY,CW*0.62,boxH,2,2,'S');
+        doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...DK);
+        doc.text('Notas:',ML+3,bY+6);
+        doc.setFont('helvetica','normal'); doc.setFontSize(7.2);
+        nl.forEach((l,i) => doc.text(l,ML+3,bY+NOTE_START+i*LINE_H));
+
+        // Datos bancarios siempre debajo de la última nota
+        const bankY = bY + NOTE_START + nl.length * LINE_H + BANK_GAP;
         doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(110,110,110);
         const banco = p?.banco || 'Cta. Ahorros N° 203 090 634 · Banco AV Villas · Titular: ORTHOWELL SAS';
-        doc.text(banco, ML+3, bY+37);
+        doc.text(banco, ML+3, bankY);
+
         const tx=ML+CW*0.64, tW=CW*0.36;
         doc.setFillColor(...DK); doc.roundedRect(tx,bY,tW,18,2,2,'F');
         doc.setTextColor(...WH); doc.setFont('helvetica','bold'); doc.setFontSize(8);
