@@ -54,7 +54,7 @@ function addFromCatalog(id) {
   if (!p) return;
   const ex = window._cotItems.find(i => i.nombre === p.nombre);
   if (ex) ex.cant++;
-  else window._cotItems.push({ nombre: p.nombre, cant: 1, precio: p.precio, obs: '', imageUrl: p.imageUrl || '' });
+  else window._cotItems.push({ nombre: p.nombre, cant: 1, precio: p.precio, obs: '', imageUrl: p.imageUrl || '', driveFileId: p.driveFileId || '' });
   document.getElementById('search-input').value = '';
   document.getElementById('search-results').classList.remove('visible');
   renderItems();
