@@ -77,14 +77,25 @@ const Pdf = (() => {
         item._pdfImg = item.imageUrl;
         continue;
       }
-      if (!item.driveFileId && !item.imageUrl) continue;
+
+      // Extraer fileId desde thumbnail URL cuando driveFileId no está explícito.
+      // imageUrl de Drive tiene formato: https://drive.google.com/thumbnail?id=FILE_ID&sz=...
+      let fileId = item.driveFileId;
+      if (!fileId && item.imageUrl) {
+        const m = item.imageUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+        if (m) fileId = m[1];
+      }
+
+      if (!fileId && !item.imageUrl) continue;
+
       try {
-        if (item.driveFileId) {
-          item._pdfImg = await _downloadDriveImg(item.driveFileId);
+        if (fileId) {
+          item._pdfImg = await _downloadDriveImg(fileId);
         } else {
           item._pdfImg = await urlToBase64(item.imageUrl);
         }
       } catch(e) {
+        console.warn('PDF img failed:', item.nombre, e.message);
         item._pdfImg = '';
       }
     }
