@@ -10,7 +10,27 @@ const App = (() => {
   async function init() {
     // Registrar Service Worker para PWA/offline
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
+      const swReg = await navigator.serviceWorker.register('./sw.js').catch(() => null);
+      if (swReg) {
+        swReg.addEventListener('updatefound', () => {
+          const nw = swReg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', () => {
+            if (nw.state === 'activated') {
+              const b = document.createElement('div');
+              b.innerHTML = '<div style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);' +
+                'background:#1a1a1a;color:#fff;padding:12px 20px;border-radius:10px;z-index:9999;' +
+                'font-size:13px;display:flex;gap:12px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,.5);">' +
+                '<span>✓ App actualizada — recarga para aplicar</span>' +
+                '<button onclick="location.reload()" style="background:var(--orange);color:#fff;border:none;' +
+                'padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;">Recargar</button>' +
+                '</div>';
+              document.body.appendChild(b);
+              setTimeout(() => b.remove(), 30000);
+            }
+          });
+        });
+      }
     }
 
     // Inicializar catálogo desde cache local (para mostrar algo inmediatamente)

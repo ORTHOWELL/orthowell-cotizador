@@ -36,15 +36,8 @@ const Pdf = (() => {
     localStorage.setItem(_brandKey(), JSON.stringify({hdr, ftr}));
   }
 
-  // ── DESCARGAR IMAGEN DESDE DRIVE CON TOKEN (evita CORS) ──────────
-  async function _downloadDriveImg(fileId) {
-    const token = await Auth.ensureToken();
-    const resp = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
-    if (!resp.ok) throw new Error('Drive ' + resp.status);
-    const blob = await resp.blob();
+  // ── BLOB → BASE64 REDIMENSIONADO ─────────────────────────────────
+  function _blobToBase64(blob) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -59,8 +52,10 @@ const Pdf = (() => {
           }
           const canvas = document.createElement('canvas');
           canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', 0.75));
+          try {
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.75));
+          } catch(e) { resolve(b64); }
         };
         img.onerror = () => resolve(b64);
         img.src = b64;
@@ -68,6 +63,58 @@ const Pdf = (() => {
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
+  }
+
+  // ── DESCARGAR IMAGEN DE DRIVE — 3 CAPAS DE FALLBACK ──────────────
+  async function _downloadDriveImg(fileId) {
+    // Capa 1: Drive API v3 con token OAuth (recomendado, evita CORS)
+    try {
+      const token = await Auth.ensureToken();
+      const resp = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      if (resp.ok) return await _blobToBase64(await resp.blob());
+      console.warn('Drive API layer 1 failed:', resp.status);
+    } catch(e) {
+      console.warn('Drive API layer 1 error:', e.message);
+    }
+
+    // Capa 2: thumbnail URL con crossOrigin (funciona si Drive envía CORS headers)
+    try {
+      const b64 = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            const MAX = 500;
+            let w = img.width, h = img.height;
+            if (w > MAX || h > MAX) {
+              if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+              else { w = Math.round(w * MAX / h); h = MAX; }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.75));
+          } catch(e) { reject(e); }
+        };
+        img.onerror = () => reject(new Error('img load failed'));
+        img.src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
+        setTimeout(() => reject(new Error('timeout')), 6000);
+      });
+      return b64;
+    } catch(e) {
+      console.warn('Drive layer 2 failed:', e.message);
+    }
+
+    // Capa 3: lh3.googleusercontent.com (CDN público de Google Drive)
+    try {
+      const resp = await fetch(`https://lh3.googleusercontent.com/d/${fileId}`);
+      if (resp.ok) return await _blobToBase64(await resp.blob());
+    } catch(e) {}
+
+    throw new Error('No se pudo cargar imagen de Drive');
   }
 
   // ── PRE-CARGAR IMÁGENES DE DRIVE PARA EL PDF ─────────────────────
@@ -122,6 +169,19 @@ const Pdf = (() => {
     try {
       // Pre-cargar imágenes de Drive
       await preloadImagesForPDF(window._cotItems);
+
+      // Diagnóstico visible: cuántas imágenes se cargaron
+      const _imgItems = window._cotItems.filter(i => i.imageUrl || i.driveFileId);
+      const _imgLoaded = _imgItems.filter(i => i._pdfImg).length;
+      if (_imgItems.length > 0) {
+        if (_imgLoaded === 0) {
+          toast(`⚠ Imágenes: 0/${_imgItems.length} — error de permisos Drive. Cierra sesión y vuelve a entrar.`, 'error');
+        } else if (_imgLoaded < _imgItems.length) {
+          toast(`⚠ Imágenes: ${_imgLoaded}/${_imgItems.length} cargadas`, 'error');
+        } else {
+          toast(`✓ ${_imgLoaded} imagen(es) cargadas`, 'success');
+        }
+      }
 
       const {jsPDF} = window.jspdf;
       const doc = new jsPDF({unit:'mm', format:'a4'});
