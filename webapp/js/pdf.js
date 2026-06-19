@@ -193,20 +193,24 @@ const Pdf = (() => {
       const OR=[242,101,34], DK=[26,26,26], WH=[255,255,255], LG=[245,245,240], BD=[220,215,208];
       const total = window._cotItems.reduce((s,i) => s+i.cant*i.precio, 0);
 
-      // Pre-calcular lista de notas para determinar altura dinámica del recuadro
-      const LINE_H=4.2, NOTE_START=12, BANK_GAP=4, BANK_H=6, BOX_PAD=3;
+      // Layout bottom-up (posiciones fijas desde el borde inferior):
+      //   [footer 18mm] [gap 2mm] [banco 8mm] [gap 2mm] [notas variable] [gap 4mm] [productos]
+      const LINE_H=4.2, NOTE_START=12, BOX_PAD=3;
       const _p = (typeof App !== 'undefined') ? App.getProfile() : null;
       const _savedNotes = _p?.notas || loadNotes();
       const nl = _savedNotes.map(n => '• ' + n);
       nl.push(`• Validez de la oferta: ${validez}.`);
       if (notas) nl.push('• ' + notas);
-      const boxH = NOTE_START + nl.length * LINE_H + BANK_GAP + BANK_H + BOX_PAD;
+      const notesH = NOTE_START + nl.length * LINE_H + BOX_PAD; // altura solo de notas
+
+      const BANK_BAND_H = 8;
+      const BANK_BAND_Y = H - 18 - 2 - BANK_BAND_H;    // 269mm → banda de banco
+      const NOTES_BOX_Y = BANK_BAND_Y - 2 - notesH;    // recuadro de notas encima de banco
 
       let y=0, pageNum=1;
       const totalPagesExp = '{{p}}';
-      // FOOT_RESERVE = boxH + 4 (gap encima) + 18 (footer) + 2 (gap debajo)
-      // Esto garantiza que el recuadro de notas nunca solape el footer
-      const ROW_H=14, FOOT_RESERVE=boxH+24, PAGE_BOTTOM=H-FOOT_RESERVE;
+      const ROW_H=14;
+      const PAGE_BOTTOM = NOTES_BOX_Y - 4;  // 4mm de margen entre último producto y notas
       const cols=[12,10,62,12,24,24,CW-12-10-62-12-24-24];
 
       function hdr() {
@@ -286,26 +290,35 @@ const Pdf = (() => {
       }
 
       function notesTotal() {
-        // Anclar el recuadro a posición fija sobre el footer, independiente de cuántos productos haya
-        const bY = H - 18 - 2 - boxH;
-        doc.setFillColor(...LG); doc.roundedRect(ML,bY,CW*0.62,boxH,2,2,'F');
-        doc.setDrawColor(...BD); doc.roundedRect(ML,bY,CW*0.62,boxH,2,2,'S');
+        // ── Recuadro de notas (posición fija desde arriba de la banda de banco)
+        doc.setFillColor(...LG);
+        doc.roundedRect(ML, NOTES_BOX_Y, CW*0.62, notesH, 2, 2, 'F');
+        doc.setDrawColor(...BD);
+        doc.roundedRect(ML, NOTES_BOX_Y, CW*0.62, notesH, 2, 2, 'S');
         doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...DK);
-        doc.text('Notas:',ML+3,bY+6);
+        doc.text('Notas:', ML+3, NOTES_BOX_Y+6);
         doc.setFont('helvetica','normal'); doc.setFontSize(7.2);
-        nl.forEach((l,i) => doc.text(l,ML+3,bY+NOTE_START+i*LINE_H));
+        nl.forEach((l,i) => doc.text(l, ML+3, NOTES_BOX_Y+NOTE_START+i*LINE_H));
 
-        const bankY = bY + NOTE_START + nl.length * LINE_H + BANK_GAP;
-        doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(110,110,110);
-        const banco = _p?.banco || 'Cta. Ahorros N° 203 090 634 · Banco AV Villas · Titular: ORTHOWELL SAS';
-        doc.text(banco, ML+3, bankY);
+        // ── Banda de información bancaria (separada, posición fija sobre el footer)
+        doc.setFillColor(238,238,234);
+        doc.roundedRect(ML, BANK_BAND_Y, CW*0.62, BANK_BAND_H, 2, 2, 'F');
+        doc.setDrawColor(...BD);
+        doc.roundedRect(ML, BANK_BAND_Y, CW*0.62, BANK_BAND_H, 2, 2, 'S');
+        const banco = (_p?.banco || 'Cta. Ahorros N° 203 090 634 · Banco AV Villas · Titular: ORTHOWELL SAS')
+                        .replace(/\n/g, ' · ');
+        doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(80,80,80);
+        const bancoLines = doc.splitTextToSize(banco, CW*0.62 - 6);
+        doc.text(bancoLines.slice(0,2), ML+3, BANK_BAND_Y + 3.5);
 
+        // ── Recuadro TOTAL (derecha, alineado con la parte superior de notas)
         const tx=ML+CW*0.64, tW=CW*0.36;
-        doc.setFillColor(...DK); doc.roundedRect(tx,bY,tW,18,2,2,'F');
+        doc.setFillColor(...DK);
+        doc.roundedRect(tx, NOTES_BOX_Y, tW, 18, 2, 2, 'F');
         doc.setTextColor(...WH); doc.setFont('helvetica','bold'); doc.setFontSize(8);
-        doc.text('TOTAL (IVA INCL.)',tx+tW/2,bY+7,{align:'center'});
+        doc.text('TOTAL (IVA INCL.)', tx+tW/2, NOTES_BOX_Y+7, {align:'center'});
         doc.setFontSize(14); doc.setTextColor(...OR);
-        doc.text('$'+fNum(total),tx+tW/2,bY+14.5,{align:'center'});
+        doc.text('$'+fNum(total), tx+tW/2, NOTES_BOX_Y+14.5, {align:'center'});
       }
 
       hdr();
