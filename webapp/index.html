@@ -66,12 +66,16 @@
       Sincronizar
     </button>
     <!-- Usuario -->
-    <div class="header-user">
-      <img id="user-avatar" src="" alt="" style="display:none;">
-      <span id="user-name"></span>
+    <div class="header-user" style="display:flex;align-items:center;gap:8px;cursor:default;" title="Sesión activa">
+      <img id="user-avatar" src="" alt="" style="display:none;width:28px;height:28px;border-radius:50%;border:2px solid var(--orange);">
+      <div style="display:flex;flex-direction:column;line-height:1.2;">
+        <span id="user-name" style="font-weight:600;font-size:12px;"></span>
+        <span id="user-email" style="font-size:10px;color:var(--muted);"></span>
+      </div>
+      <span id="user-role-badge" style="display:none;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:.5px;"></span>
     </div>
     <button class="btn-perfil" onclick="App.openProfileModal()" title="Mi perfil · Datos para PDF">👤 Perfil</button>
-    <button class="btn-admin" id="btn-admin-users" onclick="App.openUsersModal()" title="Gestionar usuarios" style="display:none;">👥</button>
+    <button class="btn-admin" id="btn-admin-users" onclick="App.openUsersModal()" title="Gestionar usuarios" style="display:none;">👥 Usuarios</button>
     <button class="btn-logout" onclick="Auth.logout()" title="Cerrar sesión">Salir</button>
   </div>
 </header>
@@ -532,6 +536,15 @@
       <button class="modal-close" onclick="document.getElementById('modal-perfil').classList.remove('open')">✕</button>
     </div>
     <div class="modal-body">
+      <!-- Tarjeta de cuenta activa -->
+      <div id="prf-account-card" style="display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border-light);border-radius:10px;padding:10px 14px;margin-bottom:14px;">
+        <img id="prf-avatar" src="" alt="" style="width:36px;height:36px;border-radius:50%;border:2px solid var(--orange);display:none;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:13px;" id="prf-google-name">—</div>
+          <div style="font-size:11px;color:var(--muted);" id="prf-google-email">—</div>
+        </div>
+        <span id="prf-rol-badge" style="font-size:9px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:.5px;background:#e8f5e9;color:#2e7d32;">VENDEDOR</span>
+      </div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Estos datos aparecen en el pie de página de cada cotización PDF que generes.</div>
       <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:12px;">
         <div class="form-group full" style="grid-column:1/-1;">

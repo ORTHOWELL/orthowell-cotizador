@@ -119,9 +119,10 @@ const App = (() => {
     }
     _rol = access.rol;
 
-    // Mostrar/ocultar botón de admin
+    // Mostrar/ocultar botón de admin y badge de rol en el header
     const btnAdmin = document.getElementById('btn-admin-users');
     if (btnAdmin) btnAdmin.style.display = _rol === 'admin' ? '' : 'none';
+    _updateRoleBadge(_rol);
 
     // Cargar perfil del vendedor
     _profile = await Sync.loadProfile(email);
@@ -276,21 +277,31 @@ const App = (() => {
   function _renderUsersList(users) {
     const el = document.getElementById('users-list');
     if (!users.length) { el.innerHTML = '<div style="padding:16px;color:var(--muted);">No hay usuarios registrados.</div>'; return; }
-    el.innerHTML = users.map((u, i) => `
-      <div class="user-row">
-        <div class="user-info">
-          <div class="user-email">${escH(u.email)}</div>
-          <div class="user-name">${escH(u.nombre)}</div>
-        </div>
-        <select class="user-rol-sel" data-idx="${i}" onchange="App._changeUser(${i},'rol',this.value)">
-          <option value="vendedor" ${u.rol==='vendedor'?'selected':''}>Vendedor</option>
-          <option value="admin" ${u.rol==='admin'?'selected':''}>Admin</option>
-        </select>
-        <label class="toggle-wrap" title="${u.activo?'Desactivar':'Activar'}">
-          <input type="checkbox" ${u.activo?'checked':''} onchange="App._changeUser(${i},'activo',this.checked)" data-idx="${i}">
-          <span class="toggle-label">${u.activo?'Activo':'Inactivo'}</span>
-        </label>
-      </div>`).join('');
+
+    // Ordenar: pendientes primero, luego activos
+    const sorted = [...users].sort((a, b) => (a.activo === b.activo ? 0 : a.activo ? 1 : -1));
+    const pending = sorted.filter(u => !u.activo).length;
+
+    el.innerHTML =
+      (pending > 0 ? `<div style="padding:8px 14px;background:#fff8e1;border-bottom:1px solid #ffe082;font-size:11px;color:#f57f17;font-weight:600;">⏳ ${pending} usuario${pending>1?'s':''} pendiente${pending>1?'s':''} de aprobación</div>` : '') +
+      sorted.map((u, i) => {
+        const origIdx = users.indexOf(u);
+        return `
+        <div class="user-row" style="${!u.activo ? 'background:#fffde7;' : ''}">
+          <div class="user-info">
+            <div class="user-email">${escH(u.email)}</div>
+            <div class="user-name">${escH(u.nombre) || '<em style="color:var(--muted)">Sin nombre</em>'}</div>
+          </div>
+          <select class="user-rol-sel" onchange="App._changeUser(${origIdx},'rol',this.value)">
+            <option value="vendedor" ${u.rol==='vendedor'?'selected':''}>Vendedor</option>
+            <option value="admin" ${u.rol==='admin'?'selected':''}>Admin</option>
+          </select>
+          <label class="toggle-wrap" title="${u.activo?'Desactivar usuario':'Activar usuario'}">
+            <input type="checkbox" ${u.activo?'checked':''} onchange="App._changeUser(${origIdx},'activo',this.checked)">
+            <span class="toggle-label" style="${!u.activo?'color:#f57f17;font-weight:700;':''}">${u.activo?'Activo':'Pendiente'}</span>
+          </label>
+        </div>`;
+      }).join('');
     el.dataset.users = JSON.stringify(users);
   }
 
@@ -306,15 +317,42 @@ const App = (() => {
       .catch(() => toast('Error al guardar', 'error'));
   }
 
+  // ── BADGE DE ROL EN HEADER ────────────────────────────────────────
+  function _updateRoleBadge(rol) {
+    const badge = document.getElementById('user-role-badge');
+    if (!badge) return;
+    const isAdmin = rol === 'admin';
+    badge.textContent = isAdmin ? 'ADMIN' : 'VENDEDOR';
+    badge.style.background = isAdmin ? '#fff3e0' : '#e8f5e9';
+    badge.style.color      = isAdmin ? '#e65100' : '#2e7d32';
+    badge.style.display    = 'inline';
+  }
+
   // ── PERFIL DEL VENDEDOR ───────────────────────────────────────────
   function openProfileModal() {
-    const email = Auth.getUser()?.email || '';
+    const user  = Auth.getUser();
+    const email = user?.email || '';
     const p = _profile || {};
-    document.getElementById('prf-nombre').value    = p.nombre    || Auth.getUser()?.name || '';
+
+    // Tarjeta de cuenta activa
+    const gName  = document.getElementById('prf-google-name');
+    const gEmail = document.getElementById('prf-google-email');
+    const gAvatar = document.getElementById('prf-avatar');
+    const gBadge  = document.getElementById('prf-rol-badge');
+    if (gName)  gName.textContent  = user?.name  || email;
+    if (gEmail) gEmail.textContent = email;
+    if (gAvatar && user?.picture) { gAvatar.src = user.picture; gAvatar.style.display = 'inline'; }
+    if (gBadge) {
+      const isAdmin = _rol === 'admin';
+      gBadge.textContent = isAdmin ? 'ADMIN' : 'VENDEDOR';
+      gBadge.style.background = isAdmin ? '#fff3e0' : '#e8f5e9';
+      gBadge.style.color      = isAdmin ? '#e65100' : '#2e7d32';
+    }
+
+    document.getElementById('prf-nombre').value    = p.nombre    || user?.name || '';
     document.getElementById('prf-cargo').value     = p.cargo     || '';
     document.getElementById('prf-telefono').value  = p.telefono  || '';
     document.getElementById('prf-email').value     = p.emailVendedor || email;
-    // Notas
     const notas = p.notas || Pdf.loadNotes();
     document.getElementById('prf-notas').value = notas.join('\n');
     document.getElementById('prf-banco').value = p.banco || '';

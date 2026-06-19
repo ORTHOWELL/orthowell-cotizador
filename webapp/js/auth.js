@@ -152,9 +152,11 @@ const Auth = (() => {
     if (el) el.textContent = msg;
   }
   function _updateHeaderUser() {
-    const nameEl = document.getElementById('user-name');
+    const nameEl   = document.getElementById('user-name');
+    const emailEl  = document.getElementById('user-email');
     const avatarEl = document.getElementById('user-avatar');
-    if (nameEl) nameEl.textContent = _userInfo?.name || _userInfo?.email || '';
+    if (nameEl)  nameEl.textContent  = _userInfo?.name  || _userInfo?.email || '';
+    if (emailEl) emailEl.textContent = _userInfo?.email || '';
     if (avatarEl && _userInfo?.picture) {
       avatarEl.src = _userInfo.picture;
       avatarEl.style.display = 'inline';
