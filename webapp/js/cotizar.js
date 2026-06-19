@@ -54,7 +54,7 @@ function addFromCatalog(id) {
   if (!p) return;
   const ex = window._cotItems.find(i => i.nombre === p.nombre);
   if (ex) ex.cant++;
-  else window._cotItems.push({ nombre: p.nombre, cant: 1, precio: p.precio, obs: '', imageUrl: p.imageUrl || '', driveFileId: p.driveFileId || '' });
+  else window._cotItems.push({ nombre: p.nombre, ref: p.ref || '', cant: 1, precio: p.precio, obs: '', imageUrl: p.imageUrl || '', driveFileId: p.driveFileId || '' });
   document.getElementById('search-input').value = '';
   document.getElementById('search-results').classList.remove('visible');
   renderItems();
@@ -79,7 +79,7 @@ function agregarManual(guardarEnCatalogo) {
 
   const ex = window._cotItems.find(i => i.nombre === nombre);
   if (ex) ex.cant += cant;
-  else window._cotItems.push({ nombre, cant, precio, obs, imageUrl: '' });
+  else window._cotItems.push({ nombre, ref, cant, precio, obs, imageUrl: '' });
 
   if (guardarEnCatalogo) {
     const catalog = Catalog.getAll();
@@ -158,6 +158,12 @@ function renderItems() {
     inpName.type = 'text'; inpName.value = item.nombre; inpName.style.minWidth = '140px';
     inpName.onchange = function() { window._cotItems[idx].nombre = this.value; updateSummary(); };
     const tdName = document.createElement('td'); tdName.appendChild(inpName);
+    if (item.ref) {
+      const refLabel = document.createElement('div');
+      refLabel.style.cssText = 'font-size:10px;color:#aaa;font-family:monospace;margin-top:2px;';
+      refLabel.textContent = item.ref;
+      tdName.appendChild(refLabel);
+    }
 
     const inpCant = document.createElement('input');
     inpCant.type = 'number'; inpCant.value = item.cant; inpCant.min = 1;
@@ -381,6 +387,6 @@ function consultaAgregarCot(id) {
   if (!p) return;
   const ex = window._cotItems.find(i => i.nombre === p.nombre);
   if (ex) ex.cant++;
-  else window._cotItems.push({ nombre: p.nombre, cant: 1, precio: p.precio||0, obs: '', imageUrl: p.imageUrl||'', driveFileId: p.driveFileId||'' });
+  else window._cotItems.push({ nombre: p.nombre, ref: p.ref||'', cant: 1, precio: p.precio||0, obs: '', imageUrl: p.imageUrl||'', driveFileId: p.driveFileId||'' });
   toast(`✓ "${p.nombre.substring(0,30)}..." agregado a la cotización`, 'success');
 }

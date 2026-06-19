@@ -203,6 +203,7 @@ const Pdf = (() => {
       const boxH = NOTE_START + nl.length * LINE_H + BANK_GAP + BANK_H + BOX_PAD;
 
       let y=0, pageNum=1;
+      const totalPagesExp = '{{p}}';
       // FOOT_RESERVE = boxH + 4 (gap encima) + 18 (footer) + 2 (gap debajo)
       // Esto garantiza que el recuadro de notas nunca solape el footer
       const ROW_H=14, FOOT_RESERVE=boxH+24, PAGE_BOTTOM=H-FOOT_RESERVE;
@@ -241,7 +242,7 @@ const Pdf = (() => {
           ['Cliente:',cliente.toUpperCase(),'Fecha:',fechaStr],
           ['Id.','','Condiciones:',condicion],
           ['Dirección',ciudad.toUpperCase(),'',''],
-          ['Contacto:',contacto.toUpperCase(),'Página',pageNum+' de ?']
+          ['Contacto:',contacto.toUpperCase(),'Página',pageNum+' de '+totalPagesExp]
         ].forEach((r,i) => {
           const cy=y+5+i*BH;
           doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...DK);
@@ -285,8 +286,8 @@ const Pdf = (() => {
       }
 
       function notesTotal() {
-        // nl, boxH, LINE_H, NOTE_START, BANK_GAP vienen del scope externo (pre-calculados)
-        const bY = y + 4;
+        // Anclar el recuadro a posición fija sobre el footer, independiente de cuántos productos haya
+        const bY = H - 18 - 2 - boxH;
         doc.setFillColor(...LG); doc.roundedRect(ML,bY,CW*0.62,boxH,2,2,'F');
         doc.setDrawColor(...BD); doc.roundedRect(ML,bY,CW*0.62,boxH,2,2,'S');
         doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...DK);
@@ -338,10 +339,15 @@ const Pdf = (() => {
             else{doc.text(cell.v,cx+(cell.a==='center'?tw/2:cell.a==='right'?tw-2:2),y+ROW_H/2+1,{align:cell.a});}
             cx+=tw;
           });
+        if (item.ref) {
+          doc.setFont('helvetica','italic'); doc.setFontSize(6); doc.setTextColor(160,160,160);
+          doc.text('REF: '+item.ref, ML+cols[0]+cols[1]+2, y+10.5);
+        }
         y+=ROW_H;
       });
 
       notesTotal(); ftr();
+      doc.putTotalPages(totalPagesExp);
       const fn = `COT_${numCot.replace(/[^a-zA-Z0-9]/g,'_')}_${cliente.substring(0,20).replace(/\s+/g,'_').toUpperCase()}.pdf`;
       doc.save(fn);
       toast('✅ PDF generado exitosamente', 'success');
