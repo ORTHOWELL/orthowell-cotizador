@@ -346,38 +346,69 @@ const Sync = (() => {
 
   // ── USUARIOS ─────────────────────────────────────────────────────
   async function checkUserAccess(email, nombre) {
+    // Sin email → denegar (pasa si faltan scopes openid/email)
+    if (!email) {
+      return { allowed: false, message: 'No se pudo obtener tu email de Google. Cierra sesión y vuelve a ingresar.' };
+    }
+
+    const isAdmin = email.trim().toLowerCase() === (CONFIG.ADMIN_EMAIL || '').trim().toLowerCase();
+
     try {
       const token = await Auth.ensureToken();
       const r = await fetch(
         `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.USERS_SHEET}!A:D`,
         { headers: { Authorization: 'Bearer ' + token } }
       );
+
       if (!r.ok) {
-        // Hoja no existe → crear y registrar como admin
-        await _initUsersSheet(email, nombre, token);
-        return { allowed: true, rol: 'admin' };
-      }
-      const data = await r.json();
-      const rows = (data.values || []).slice(1);
-
-      // Si la hoja no tiene ningún usuario con email válido, registrar como admin
-      const validRows = rows.filter(r => (r[0]||'').trim());
-      if (!validRows.length) {
-        await _initUsersSheet(email, nombre, token);
-        return { allowed: true, rol: 'admin' };
-      }
-
-      const userRow = validRows.find(row => row[0].trim().toLowerCase() === email.trim().toLowerCase());
-      if (!userRow) {
+        // Hoja no existe → crearla con el admin principal
+        await _initUsersSheet(
+          CONFIG.ADMIN_EMAIL,
+          isAdmin ? nombre : 'Administrador',
+          token
+        );
+        if (isAdmin) return { allowed: true, rol: 'admin' };
         await _appendUser(email, nombre, 'vendedor', 'FALSE', token);
         return { allowed: false, message: 'Acceso pendiente de aprobación. Contacta al administrador.' };
       }
-      if ((userRow[3]||'').toUpperCase() !== 'TRUE') {
+
+      const data = await r.json();
+      const rows = (data.values || []).slice(1);
+      const validRows = rows.filter(row => (row[0] || '').trim());
+
+      if (!validRows.length) {
+        // Hoja vacía → solo el admin principal se auto-registra
+        await _initUsersSheet(
+          CONFIG.ADMIN_EMAIL,
+          isAdmin ? nombre : 'Administrador',
+          token
+        );
+        if (isAdmin) return { allowed: true, rol: 'admin' };
+        await _appendUser(email, nombre, 'vendedor', 'FALSE', token);
+        return { allowed: false, message: 'Acceso pendiente de aprobación. Contacta al administrador.' };
+      }
+
+      const userRow = validRows.find(row => row[0].trim().toLowerCase() === email.trim().toLowerCase());
+
+      if (!userRow) {
+        // Usuario nuevo → registrar como pendiente
+        await _appendUser(email, nombre, 'vendedor', 'FALSE', token);
+        if (isAdmin) return { allowed: true, rol: 'admin' };
+        return { allowed: false, message: 'Acceso pendiente de aprobación. Contacta al administrador.' };
+      }
+
+      // Admin siempre activo independiente de lo que diga la hoja
+      if (isAdmin) return { allowed: true, rol: 'admin' };
+
+      if ((userRow[3] || '').toUpperCase() !== 'TRUE') {
         return { allowed: false, message: 'Tu acceso no está activo. Contacta al administrador.' };
       }
       return { allowed: true, rol: userRow[2] || 'vendedor' };
+
     } catch(e) {
-      return { allowed: true, rol: 'vendedor' }; // Si falla, permitir acceso
+      console.error('checkUserAccess:', e);
+      if (isAdmin) return { allowed: true, rol: 'admin' };
+      return { allowed: false, message: 'Error al verificar acceso. Intenta de nuevo.' };
     }
   }
 

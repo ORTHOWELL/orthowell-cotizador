@@ -42,8 +42,15 @@ const CONFIG = {
   // Intervalo de sincronización automática desde Sheets (ms)
   AUTO_SYNC_INTERVAL: 5 * 60 * 1000,       // 5 minutos
 
+  // Email del administrador principal (siempre tiene acceso aunque falle el Sheet)
+  ADMIN_EMAIL: 'andresortega.ie@gmail.com',
+
   // Scopes de Google APIs necesarios
+  // email + profile: para obtener nombre y correo del usuario autenticado
   GOOGLE_SCOPES: [
+    'openid',
+    'email',
+    'profile',
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/drive.file',
   ].join(' '),
