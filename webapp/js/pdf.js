@@ -198,10 +198,10 @@ const Pdf = (() => {
       const LINE_H=4.2, NOTE_START=12, BOX_PAD=3;
       const _p = (typeof App !== 'undefined') ? App.getProfile() : null;
       const _savedNotes = _p?.notas || loadNotes();
-      const nl = _savedNotes.map(n => '• ' + n);
+      const nl = _savedNotes.flatMap(n => n.split('\n').filter(l=>l.trim()).map(l => '• '+l.trim()));
       nl.push(`• Validez de la oferta: ${validez}.`);
-      if (notas) nl.push('• ' + notas);
-      const notesH = NOTE_START + nl.length * LINE_H + BOX_PAD; // altura solo de notas
+      if (notas) notas.split('\n').filter(l=>l.trim()).forEach(l => nl.push('• '+l.trim()));
+      const notesH = NOTE_START + nl.length * LINE_H + BOX_PAD + 2; // +2 margen extra de seguridad
 
       const BANK_BAND_H = 8;
       const BANK_BAND_Y = H - 18 - 2 - BANK_BAND_H;    // 269mm → banda de banco
