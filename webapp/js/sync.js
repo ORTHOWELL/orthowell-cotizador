@@ -359,7 +359,15 @@ const Sync = (() => {
       }
       const data = await r.json();
       const rows = (data.values || []).slice(1);
-      const userRow = rows.find(row => (row[0]||'').toLowerCase() === email.toLowerCase());
+
+      // Si la hoja no tiene ningún usuario con email válido, registrar como admin
+      const validRows = rows.filter(r => (r[0]||'').trim());
+      if (!validRows.length) {
+        await _initUsersSheet(email, nombre, token);
+        return { allowed: true, rol: 'admin' };
+      }
+
+      const userRow = validRows.find(row => row[0].trim().toLowerCase() === email.trim().toLowerCase());
       if (!userRow) {
         await _appendUser(email, nombre, 'vendedor', 'FALSE', token);
         return { allowed: false, message: 'Acceso pendiente de aprobación. Contacta al administrador.' };
