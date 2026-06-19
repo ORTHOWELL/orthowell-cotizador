@@ -426,11 +426,17 @@ const Sync = (() => {
   }
 
   async function _appendUser(email, nombre, rol, activo, token) {
-    await fetch(
-      `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.USERS_SHEET}!A:D:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    if (!email) return; // nunca escribir fila sin email
+    const r = await fetch(
+      `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.USERS_SHEET}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: [[email, nombre, rol, activo]] }) }
     );
+    if (!r.ok) {
+      const err = await r.text().catch(() => r.status);
+      console.error('_appendUser failed:', err);
+      throw new Error('No se pudo registrar usuario: ' + err);
+    }
   }
 
   async function loadUsers() {
@@ -442,8 +448,17 @@ const Sync = (() => {
     if (!r.ok) return [];
     const data = await r.json();
     return (data.values || []).slice(1)
-      .filter(r => r[0])
+      .filter(r => (r[0]||'').trim()) // ignorar filas sin email (pueden quedar de versiones viejas)
       .map(r => ({ email: r[0]||'', nombre: r[1]||'', rol: r[2]||'vendedor', activo: (r[3]||'').toUpperCase()==='TRUE' }));
+  }
+
+  async function addUserManual(email, nombre, rol, token) {
+    if (!token) token = await Auth.ensureToken();
+    // Verificar si ya existe
+    const users = await loadUsers();
+    const exists = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (exists) throw new Error('El usuario ya está registrado.');
+    await _appendUser(email.trim(), nombre.trim(), rol, 'TRUE', token);
   }
 
   async function saveUsers(users) {
@@ -513,6 +528,7 @@ const Sync = (() => {
     checkUserAccess,
     loadUsers,
     saveUsers,
+    addUserManual,
     loadProfile,
     saveProfile,
   };

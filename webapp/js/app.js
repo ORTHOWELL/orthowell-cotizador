@@ -266,6 +266,11 @@ const App = (() => {
     const modal = document.getElementById('modal-usuarios');
     modal.classList.add('open');
     document.getElementById('users-list').innerHTML = '<div style="padding:16px;color:var(--muted);">Cargando...</div>';
+    // Limpiar form manual
+    const fe = document.getElementById('new-user-email');
+    const fn = document.getElementById('new-user-nombre');
+    if (fe) fe.value = '';
+    if (fn) fn.value = '';
     try {
       const users = await Sync.loadUsers();
       _renderUsersList(users);
@@ -276,30 +281,39 @@ const App = (() => {
 
   function _renderUsersList(users) {
     const el = document.getElementById('users-list');
-    if (!users.length) { el.innerHTML = '<div style="padding:16px;color:var(--muted);">No hay usuarios registrados.</div>'; return; }
+    if (!users.length) {
+      el.innerHTML = '<div style="padding:16px;color:var(--muted);text-align:center;">No hay usuarios registrados todavía.</div>';
+      el.dataset.users = '[]';
+      return;
+    }
 
-    // Ordenar: pendientes primero, luego activos
     const sorted = [...users].sort((a, b) => (a.activo === b.activo ? 0 : a.activo ? 1 : -1));
     const pending = sorted.filter(u => !u.activo).length;
 
     el.innerHTML =
-      (pending > 0 ? `<div style="padding:8px 14px;background:#fff8e1;border-bottom:1px solid #ffe082;font-size:11px;color:#f57f17;font-weight:600;">⏳ ${pending} usuario${pending>1?'s':''} pendiente${pending>1?'s':''} de aprobación</div>` : '') +
-      sorted.map((u, i) => {
+      (pending > 0
+        ? `<div style="padding:10px 14px;background:#fff8e1;border-bottom:2px solid #ffe082;font-size:12px;color:#e65100;font-weight:700;display:flex;align-items:center;gap:8px;">
+            <span>⏳</span>
+            <span>${pending} usuario${pending>1?'s':''} pendiente${pending>1?'s':''} de aprobación — actívalos abajo para dar acceso</span>
+           </div>`
+        : '') +
+      sorted.map((u) => {
         const origIdx = users.indexOf(u);
+        const isPending = !u.activo;
         return `
-        <div class="user-row" style="${!u.activo ? 'background:#fffde7;' : ''}">
-          <div class="user-info">
-            <div class="user-email">${escH(u.email)}</div>
-            <div class="user-name">${escH(u.nombre) || '<em style="color:var(--muted)">Sin nombre</em>'}</div>
+        <div class="user-row" style="${isPending ? 'background:#fffde7;border-left:3px solid #ffc107;' : ''}">
+          <div class="user-info" style="flex:1;min-width:0;">
+            <div class="user-email" style="font-weight:600;">${escH(u.email)}</div>
+            <div class="user-name" style="font-size:11px;color:var(--muted);">${escH(u.nombre) || '<em>Sin nombre</em>'}</div>
           </div>
-          <select class="user-rol-sel" onchange="App._changeUser(${origIdx},'rol',this.value)">
+          <select class="user-rol-sel" onchange="App._changeUser(${origIdx},'rol',this.value)" style="font-size:12px;">
             <option value="vendedor" ${u.rol==='vendedor'?'selected':''}>Vendedor</option>
-            <option value="admin" ${u.rol==='admin'?'selected':''}>Admin</option>
+            <option value="admin"    ${u.rol==='admin'   ?'selected':''}>Admin</option>
           </select>
-          <label class="toggle-wrap" title="${u.activo?'Desactivar usuario':'Activar usuario'}">
-            <input type="checkbox" ${u.activo?'checked':''} onchange="App._changeUser(${origIdx},'activo',this.checked)">
-            <span class="toggle-label" style="${!u.activo?'color:#f57f17;font-weight:700;':''}">${u.activo?'Activo':'Pendiente'}</span>
-          </label>
+          ${isPending
+            ? `<button onclick="App._changeUser(${origIdx},'activo',true)" style="background:#2e7d32;color:#fff;border:none;padding:7px 14px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;">✓ Aprobar</button>`
+            : `<button onclick="App._changeUser(${origIdx},'activo',false)" style="background:var(--danger);color:#fff;border:none;padding:7px 12px;border-radius:7px;cursor:pointer;font-size:12px;">Desactivar</button>`
+          }
         </div>`;
       }).join('');
     el.dataset.users = JSON.stringify(users);
@@ -311,10 +325,34 @@ const App = (() => {
     if (!users[idx]) return;
     users[idx][field] = value;
     el.dataset.users = JSON.stringify(users);
-    // Guardar inmediatamente
     Sync.saveUsers(users)
-      .then(() => toast('✓ Usuario actualizado', 'success'))
+      .then(() => {
+        toast('✓ Usuario actualizado', 'success');
+        _renderUsersList(users); // re-render para reflejar cambio
+      })
       .catch(() => toast('Error al guardar', 'error'));
+  }
+
+  async function addUserManual() {
+    const email  = (document.getElementById('new-user-email')?.value  || '').trim();
+    const nombre = (document.getElementById('new-user-nombre')?.value || '').trim();
+    const rol    = document.getElementById('new-user-rol')?.value || 'vendedor';
+    if (!email || !email.includes('@')) { toast('Ingresa un email válido', 'error'); return; }
+    const btn = document.getElementById('btn-add-user');
+    if (btn) btn.disabled = true;
+    try {
+      await Sync.addUserManual(email, nombre, rol);
+      toast('✓ Usuario agregado y activado', 'success');
+      document.getElementById('new-user-email').value  = '';
+      document.getElementById('new-user-nombre').value = '';
+      // Recargar lista
+      const users = await Sync.loadUsers();
+      _renderUsersList(users);
+    } catch(e) {
+      toast(e.message || 'Error al agregar usuario', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   // ── BADGE DE ROL EN HEADER ────────────────────────────────────────
@@ -382,7 +420,7 @@ const App = (() => {
 
   return {
     init, afterAuth, onLogout,
-    openUsersModal, _changeUser,
+    openUsersModal, _changeUser, addUserManual,
     openProfileModal, saveProfile,
     getProfile: () => _profile,
     getRol: () => _rol,

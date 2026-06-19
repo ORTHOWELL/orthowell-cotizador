@@ -520,10 +520,40 @@
       <button class="modal-close" onclick="document.getElementById('modal-usuarios').classList.remove('open')">✕</button>
     </div>
     <div class="modal-body" style="padding:0;">
-      <div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border-light);font-size:12px;color:var(--muted);">
-        Los usuarios se registran automáticamente al iniciar sesión. Actívalos para darles acceso.
+      <!-- Agregar usuario manualmente -->
+      <div style="padding:14px 16px;background:#f0f7ff;border-bottom:2px solid #90caf9;">
+        <div style="font-size:12px;font-weight:700;color:#1565c0;margin-bottom:10px;">➕ Agregar usuario manualmente</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+          <div style="flex:2;min-width:160px;">
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Email Google *</label>
+            <input id="new-user-email" type="email" placeholder="usuario@gmail.com"
+              style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;box-sizing:border-box;">
+          </div>
+          <div style="flex:1;min-width:120px;">
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Nombre</label>
+            <input id="new-user-nombre" type="text" placeholder="Nombre"
+              style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;box-sizing:border-box;">
+          </div>
+          <div style="min-width:110px;">
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Rol</label>
+            <select id="new-user-rol"
+              style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;">
+              <option value="vendedor">Vendedor</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <button id="btn-add-user" onclick="App.addUserManual()"
+            style="background:#1565c0;color:#fff;border:none;padding:8px 16px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap;">
+            Agregar y activar
+          </button>
+        </div>
+        <div style="font-size:11px;color:#5c6bc0;margin-top:7px;">El usuario se crea activo. Debe iniciar sesión con esa cuenta de Google.</div>
       </div>
-      <div id="users-list" style="padding:8px;"></div>
+      <!-- Lista de usuarios registrados -->
+      <div style="padding:8px 16px 4px;font-size:11px;color:var(--muted);">
+        Usuarios registrados — usa <strong>✓ Aprobar</strong> para dar acceso a los pendientes.
+      </div>
+      <div id="users-list" style="padding:0 8px 8px;"></div>
     </div>
   </div>
 </div>
