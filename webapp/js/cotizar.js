@@ -316,6 +316,9 @@ function consultaMostrarDetalle(p, itemEl) {
     itemEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
+  const rol = (typeof App !== 'undefined') ? App.getRol() : 'vendedor';
+  const isAliado = rol === 'aliado';
+
   const margen   = (p.precio > 0 && p.costo > 0) ? ((p.precio - p.costo) / p.precio * 100).toFixed(1) : null;
   const utilidad = (p.precio > 0 && p.costo > 0) ? fCOP(p.precio - p.costo) : null;
 
@@ -327,14 +330,14 @@ function consultaMostrarDetalle(p, itemEl) {
         </div>
         <div style="flex:1;min-width:0;">
           <div class="consulta-name">${escH(p.nombre)}</div>
-          ${p.ref   ? `<div class="consulta-ref">${escH(p.ref)}</div>` : ''}
-          <div class="consulta-marca">
+          ${p.ref ? `<div class="consulta-ref">${escH(p.ref)}</div>` : ''}
+          ${!isAliado ? `<div class="consulta-marca">
             ${p.marca ? `🏷️ <strong>${escH(p.marca)}</strong>` : '<span style="color:var(--muted);">Sin marca registrada</span>'}
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+          </div>` : ''}
+          ${!isAliado ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
             <button class="consulta-add-btn" onclick="consultaAgregarCot(${p.id})">+ Agregar a cotización</button>
             <button class="btn btn-outline btn-sm" onclick="switchTab('catalogo');Catalog.editProduct(${p.id})">✏️ Editar producto</button>
-          </div>
+          </div>` : ''}
         </div>
       </div>
       <div class="consulta-grid">
@@ -343,26 +346,26 @@ function consultaMostrarDetalle(p, itemEl) {
           <div class="consulta-tile-value">${fCOP(p.precio||0)}</div>
           <div class="consulta-tile-sub">Precio de venta estándar</div>
         </div>
-        <div class="consulta-tile">
+        ${!isAliado ? `<div class="consulta-tile">
           <div class="consulta-tile-label">Precio 2</div>
           <div class="consulta-tile-value">${fCOP(p.precio2||0)}</div>
           <div class="consulta-tile-sub">Clientes especiales</div>
-        </div>
+        </div>` : ''}
         <div class="consulta-tile">
           <div class="consulta-tile-label">Precio 3</div>
           <div class="consulta-tile-value">${fCOP(p.precio3||0)}</div>
           <div class="consulta-tile-sub">Aliados / distribuidores</div>
         </div>
-        <div class="consulta-tile costo">
+        ${!isAliado ? `<div class="consulta-tile costo">
           <div class="consulta-tile-label">🏭 Costo</div>
           <div class="consulta-tile-value">${fCOP(p.costo||0)}</div>
           <div class="consulta-tile-sub">Costo de adquisición</div>
-        </div>
-        <div class="consulta-tile ${margen !== null ? (parseFloat(margen) >= 0 ? 'margen-pos' : 'margen-neg') : ''}">
+        </div>` : ''}
+        ${!isAliado ? `<div class="consulta-tile ${margen !== null ? (parseFloat(margen) >= 0 ? 'margen-pos' : 'margen-neg') : ''}">
           <div class="consulta-tile-label">📊 Margen</div>
           <div class="consulta-tile-value">${margen !== null ? margen + '%' : '—'}</div>
           <div class="consulta-tile-sub">${utilidad ? 'Utilidad: ' + utilidad : 'Sin costo registrado'}</div>
-        </div>
+        </div>` : ''}
         <div class="consulta-tile iva">
           <div class="consulta-tile-label">🧾 IVA</div>
           <div class="consulta-tile-value">${p.iva||0}%</div>
@@ -373,11 +376,15 @@ function consultaMostrarDetalle(p, itemEl) {
           <div class="consulta-tile-value" style="${(p.saldo||0) > 0 ? 'color:var(--success);' : ''}">${p.saldo||0}</div>
           <div class="consulta-tile-sub">${(p.saldo||0) > 0 ? 'Unidades disponibles' : 'Sin stock registrado'}</div>
         </div>
-        <div class="consulta-tile" style="grid-column:span 2;">
+        ${!isAliado ? `<div class="consulta-tile" style="grid-column:span 2;">
           <div class="consulta-tile-label">🏷️ Marca / Referencia</div>
           <div class="consulta-tile-value" style="font-size:15px;">${escH(p.marca||'—')}</div>
           <div class="consulta-tile-sub" style="font-family:'DM Mono',monospace;">${escH(p.ref||'Sin referencia')}</div>
-        </div>
+        </div>` : `<div class="consulta-tile">
+          <div class="consulta-tile-label">🔖 Referencia</div>
+          <div class="consulta-tile-value" style="font-size:15px;font-family:'DM Mono',monospace;">${escH(p.ref||'—')}</div>
+          <div class="consulta-tile-sub">Código del producto</div>
+        </div>`}
       </div>
     </div>`;
 }

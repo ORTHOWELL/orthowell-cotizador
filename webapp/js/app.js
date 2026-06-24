@@ -123,6 +123,7 @@ const App = (() => {
     const btnAdmin = document.getElementById('btn-admin-users');
     if (btnAdmin) btnAdmin.style.display = _rol === 'admin' ? '' : 'none';
     _updateRoleBadge(_rol);
+    _applyRoleRestrictions(_rol);
 
     // Cargar perfil del vendedor
     _profile = await Sync.loadProfile(email);
@@ -258,6 +259,10 @@ const App = (() => {
     window._cotItems = [];
     renderItems();
     updateSummary();
+    // Restaurar tabs ocultos para próxima sesión
+    document.querySelectorAll('.tab').forEach(t => t.style.display = '');
+    const btnSync = document.getElementById('btn-sync');
+    if (btnSync) btnSync.style.display = '';
   }
 
   // ── USUARIOS (modal admin) ────────────────────────────────────────
@@ -308,6 +313,7 @@ const App = (() => {
           </div>
           <select class="user-rol-sel" onchange="App._changeUser(${origIdx},'rol',this.value)" style="font-size:12px;">
             <option value="vendedor" ${u.rol==='vendedor'?'selected':''}>Vendedor</option>
+            <option value="aliado"   ${u.rol==='aliado'  ?'selected':''}>Aliado</option>
             <option value="admin"    ${u.rol==='admin'   ?'selected':''}>Admin</option>
           </select>
           ${isPending
@@ -352,6 +358,22 @@ const App = (() => {
       toast(e.message || 'Error al agregar usuario', 'error');
     } finally {
       if (btn) btn.disabled = false;
+    }
+  }
+
+  // ── RESTRICCIONES POR ROL ─────────────────────────────────────────
+  function _applyRoleRestrictions(rol) {
+    const isAliado = rol === 'aliado';
+    const tabs = document.querySelectorAll('.tab');
+    // Tabs: 0=cotizar, 1=consulta, 2=catalogo
+    if (tabs[0]) tabs[0].style.display = isAliado ? 'none' : '';
+    if (tabs[2]) tabs[2].style.display = isAliado ? 'none' : '';
+    // Ocultar botón de sincronización manual para aliados (solo lectura)
+    const btnSync = document.getElementById('btn-sync');
+    if (btnSync) btnSync.style.display = isAliado ? 'none' : '';
+    // Si es aliado, forzar pestaña de consulta
+    if (isAliado) {
+      if (typeof switchTab === 'function') switchTab('consulta');
     }
   }
 
