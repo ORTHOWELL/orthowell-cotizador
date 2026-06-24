@@ -367,9 +367,9 @@ function consultaMostrarDetalle(p, itemEl) {
           <div class="consulta-tile-sub">${utilidad ? 'Utilidad: ' + utilidad : 'Sin costo registrado'}</div>
         </div>` : ''}
         <div class="consulta-tile iva">
-          <div class="consulta-tile-label">🧾 IVA</div>
-          <div class="consulta-tile-value">${p.iva||0}%</div>
-          <div class="consulta-tile-sub">${p.iva > 0 ? 'Precio c/IVA: ' + fCOP(Math.round((p.precio||0) * (1 + (p.iva||0)/100))) : 'No aplica IVA'}</div>
+          <div class="consulta-tile-label">🧾 IVA ${p.iva||0}%</div>
+          <div class="consulta-tile-value">${p.iva > 0 ? fCOP(Math.round((p.precio||0) / (1 + (p.iva||0) / 100))) : fCOP(p.precio||0)}</div>
+          <div class="consulta-tile-sub">${p.iva > 0 ? 'Valor base (precio sin IVA)' : 'No aplica IVA'}</div>
         </div>
         <div class="consulta-tile" style="${(p.saldo||0) > 0 ? 'background:var(--success-bg);border-color:#a8e6c5;' : ''}">
           <div class="consulta-tile-label">📦 Saldo en bodega</div>
