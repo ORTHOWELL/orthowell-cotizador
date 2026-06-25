@@ -3,9 +3,9 @@
  * Estrategia: Cache-first para assets estáticos, Network-first para APIs Google.
  */
 
-const CACHE_NAME    = 'orthowell-v3.5';
+const CACHE_NAME    = 'orthowell-v3.6';
 const CDN_CACHE     = 'orthowell-cdn-v2.6';
-const IMAGES_CACHE  = 'orthowell-images-v2.8';
+const IMAGES_CACHE  = 'orthowell-images-v2.9';
 
 // Assets del app shell que se cachean en la instalación
 const STATIC_ASSETS = [
@@ -76,15 +76,9 @@ self.addEventListener('fetch', event => {
     return; // No interceptar — dejar pasar directamente
   }
 
-  // Google Drive thumbnails: Cache first (imágenes de productos)
-  if (url.hostname === 'drive.google.com' && url.pathname.includes('thumbnail')) {
-    event.respondWith(cacheFirstWithFallback(event.request, IMAGES_CACHE));
-    return;
-  }
-
-  // lh3.googleusercontent.com (Drive CDN de imágenes)
-  if (url.hostname === 'lh3.googleusercontent.com') {
-    event.respondWith(cacheFirstWithFallback(event.request, IMAGES_CACHE));
+  // Drive thumbnails y lh3: dejar pasar sin cachear
+  // (las imágenes se cargan via Drive API autenticada, no por URL pública)
+  if (url.hostname === 'drive.google.com' || url.hostname === 'lh3.googleusercontent.com') {
     return;
   }
 

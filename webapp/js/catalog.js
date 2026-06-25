@@ -249,36 +249,25 @@ const Catalog = (() => {
     return objUrl;
   }
 
-  // Carga imagen: intenta URL directa; si falla y hay fileId, descarga vía API autenticada
+  // Carga imagen de Drive siempre via API autenticada (garantizado, sin depender de URLs públicas)
   function _loadDriveImg(im, url, fileId, wrap) {
     const _placeholder = () => wrap.replaceChildren(
       Object.assign(document.createElement('span'), { textContent: '📦', style: 'font-size:34px' })
     );
-    // Si ya está en caché, usar inmediatamente
-    if (fileId && _driveImgCache.has(fileId)) {
-      im.src = _driveImgCache.get(fileId);
-      im.onerror = _placeholder;
-      return;
-    }
-    if (url) {
+
+    if (fileId && Auth.isAuthenticated()) {
+      // Primario: Drive API con token (no depende de permisos públicos ni del SW)
+      _fetchDriveBlob(fileId)
+        .then(src => { im.onerror = _placeholder; im.src = src; })
+        .catch(() => {
+          // Si falla el API, intentar URL de thumbnail directa como último recurso
+          if (url) { im.src = url; im.onerror = _placeholder; }
+          else _placeholder();
+        });
+    } else if (url) {
+      // Sin fileId: intentar URL directa
       im.src = url;
-      im.onerror = () => {
-        if (fileId && Auth.isAuthenticated()) {
-          // Fallback: descargar con API de Drive (funciona siempre para archivos propios)
-          _fetchDriveBlob(fileId).then(src => {
-            im.onerror = _placeholder;
-            im.src = src;
-          }).catch(_placeholder);
-        } else {
-          _placeholder();
-        }
-      };
-    } else if (fileId && Auth.isAuthenticated()) {
-      // Sin URL thumbnail pero tenemos fileId → descargar directo
-      _fetchDriveBlob(fileId).then(src => {
-        im.onerror = _placeholder;
-        im.src = src;
-      }).catch(_placeholder);
+      im.onerror = _placeholder;
     } else {
       _placeholder();
     }
