@@ -281,6 +281,13 @@ const Catalog = (() => {
     return card;
   }
 
+  // Limpia el caché de imágenes del SW para que la próxima carga traiga la imagen nueva
+  function _clearImageCache() {
+    if (!navigator.serviceWorker?.controller) return;
+    const mc = new MessageChannel();
+    navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_IMAGE_CACHE' }, [mc.port2]);
+  }
+
   // ── CONFIRM IMAGE (desde modal de imagen) ────────────────────────
   async function confirmarImg() {
     const selected = window._selectedImg;
@@ -297,13 +304,12 @@ const Catalog = (() => {
           toast('Subiendo imagen a Drive...', 'success');
           const result = await Sync.uploadImageToDrive(p.ref || `prod_${p.id}`, selected);
           setImage(target.catId, result.url, result.fileId);
+          _clearImageCache(); // borrar caché para que se vea la imagen nueva
         } catch(e) {
-          // Si falla Drive, guardar URL temporal (base64) localmente
           console.warn('Drive upload failed, using local:', e);
           setImage(target.catId, selected, '');
         }
       } else {
-        // Offline o URL externa
         setImage(target.catId, selected, '');
       }
       renderCatalog(document.getElementById('cat-search')?.value || '');

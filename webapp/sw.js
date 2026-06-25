@@ -5,7 +5,7 @@
 
 const CACHE_NAME    = 'orthowell-v3.4';
 const CDN_CACHE     = 'orthowell-cdn-v2.6';
-const IMAGES_CACHE  = 'orthowell-images-v2.6';
+const IMAGES_CACHE  = 'orthowell-images-v2.7';
 
 // Assets del app shell que se cachean en la instalación
 const STATIC_ASSETS = [
