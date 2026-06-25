@@ -580,6 +580,8 @@ const Catalog = (() => {
               if (Auth.isAuthenticated()) {
                 const result = await Sync.uploadImageToDrive(prod.ref || `prod_${prod.id}`, b64);
                 setImage(prod.id, result.url, result.fileId);
+                // Cachear base64 para mostrar imagen inmediatamente sin esperar a Drive
+                _driveImgCache.set(result.url, b64);
               } else {
                 setImage(prod.id, b64, '');
               }
