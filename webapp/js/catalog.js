@@ -246,6 +246,27 @@ const Catalog = (() => {
   // Caché en memoria: driveFileId → objectURL o base64 (dura la sesión)
   const _driveImgCache = new Map();
 
+  // Genera thumbnail pequeño (~180px, ~10-15KB) para guardar en Sheets
+  function _compressThumb(b64) {
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 180;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', 0.55));
+      };
+      img.onerror = () => resolve(b64);
+      img.src = b64;
+    });
+  }
+
   // Descarga un archivo de Drive usando la API autenticada (garantizado para nuestros archivos)
   async function _fetchDriveBlob(fileId) {
     if (_driveImgCache.has(fileId)) return _driveImgCache.get(fileId);
@@ -268,40 +289,35 @@ const Catalog = (() => {
     return m ? m[1] : null;
   }
 
-  // Carga imagen de Drive:
-  // 1. Usa <img> con URL de thumbnail (navegador usa cookies de Google, funciona para archivos públicos)
-  // 2. Si falla, descarga con token OAuth (fallback para admin / archivos privados)
   function _loadDriveImg(im, url, fileId, wrap) {
     const _placeholder = () => wrap.replaceChildren(
       Object.assign(document.createElement('span'), { textContent: '📦', style: 'font-size:34px' })
     );
 
+    // Thumbnail base64 almacenada en Sheets → mostrar directamente (todos los usuarios)
+    if (url && url.startsWith('data:')) {
+      im.src = url;
+      im.onerror = _placeholder;
+      return;
+    }
+
     const id = fileId || _fileIdFromUrl(url);
 
-    // Si ya está en caché (base64 o blob URL), usar inmediatamente
+    // Caché en memoria (base64 o blob URL)
     if (id && _driveImgCache.has(id)) {
       im.src = _driveImgCache.get(id);
       im.onerror = _placeholder;
       return;
     }
 
-    // Intentar thumbnail URL directa (funciona si el archivo es público)
-    const thumbUrl = id
-      ? `https://drive.google.com/thumbnail?id=${id}&sz=w800`
-      : url;
-
-    if (thumbUrl) {
-      im.src = thumbUrl;
-      im.onerror = () => {
-        // Fallback: Drive API con token del usuario (funciona para el admin/dueño del archivo)
-        if (id && Auth.isAuthenticated()) {
-          _fetchDriveBlob(id)
-            .then(src => { im.onerror = _placeholder; im.src = src; })
-            .catch(_placeholder);
-        } else {
-          _placeholder();
-        }
-      };
+    // Fallback: Drive API con token OAuth (solo admin / dueño del archivo)
+    if (id && Auth.isAuthenticated()) {
+      _fetchDriveBlob(id)
+        .then(src => { im.onerror = _placeholder; im.src = src; })
+        .catch(_placeholder);
+    } else if (url) {
+      im.src = url;
+      im.onerror = _placeholder;
     } else {
       _placeholder();
     }
@@ -374,39 +390,40 @@ const Catalog = (() => {
       const p = getById(target.catId);
       if (!p) return;
 
-      // Subir a Drive si tenemos conexión y es base64
+      // Comprimir thumbnail pequeño para guardar en Sheets (visible a todos los usuarios)
+      const thumb = await _compressThumb(selected);
+
+      // Subir imagen completa a Drive (backup de calidad)
       if (Auth.isAuthenticated() && selected.startsWith('data:image')) {
         try {
           toast('Subiendo imagen a Drive...', 'success');
           const result = await Sync.uploadImageToDrive(p.ref || `prod_${p.id}`, selected);
-          setImage(target.catId, result.url, result.fileId);
+          // imageUrl = thumbnail pequeño (va a Sheets), driveFileId = backup completo
+          setImage(target.catId, thumb, result.fileId);
           _clearImageCache();
-          // Cachear base64 por fileId para mostrar imagen inmediatamente
           _driveImgCache.set(result.fileId, selected);
-          // Actualizar SOLO la tarjeta afectada en el DOM (evita re-renderizar todo el catálogo)
-          const cardWrap = document.querySelector(`.catalog-card[data-id="${target.catId}"] .catalog-card-img`);
-          if (cardWrap) {
-            const im = cardWrap.querySelector('img') || (() => {
-              const i = document.createElement('img'); i.alt = '';
-              cardWrap.innerHTML = ''; cardWrap.appendChild(i);
-              const ov = cardWrap.parentElement?.querySelector('.img-overlay');
-              if (!ov) {
-                const o = document.createElement('div'); o.className = 'img-overlay';
-                o.innerHTML = `<button class="img-overlay-btn" onclick="abrirImgModal('catalog',${target.catId},null)">📁 Subir foto</button><button class="img-overlay-btn" onclick="abrirImgModalBuscar(${target.catId})">🔍 Buscar</button>`;
-                cardWrap.appendChild(o);
-              }
-              return i;
-            })();
-            im.src = selected;
-          }
-          return;
         } catch(e) {
-          console.warn('Drive upload failed, using local:', e);
-          setImage(target.catId, selected, '');
+          console.warn('Drive upload failed, storing thumb only:', e);
+          setImage(target.catId, thumb, '');
         }
       } else {
-        setImage(target.catId, selected, '');
+        setImage(target.catId, thumb, '');
       }
+
+      // Actualizar SOLO la tarjeta afectada en el DOM
+      const cardWrap = document.querySelector(`.catalog-card[data-id="${target.catId}"] .catalog-card-img`);
+      if (cardWrap) {
+        const im = cardWrap.querySelector('img') || (() => {
+          const i = document.createElement('img'); i.alt = '';
+          cardWrap.innerHTML = ''; cardWrap.appendChild(i);
+          const ov = document.createElement('div'); ov.className = 'img-overlay';
+          ov.innerHTML = `<button class="img-overlay-btn" onclick="abrirImgModal('catalog',${target.catId},null)">📁 Subir foto</button><button class="img-overlay-btn" onclick="abrirImgModalBuscar(${target.catId})">🔍 Buscar</button>`;
+          cardWrap.appendChild(ov);
+          return i;
+        })();
+        im.src = thumb;
+      }
+      return;
       renderCatalog(document.getElementById('cat-search')?.value || '');
     } else {
       // Imagen para item de cotización (solo local, no va a Drive)
@@ -621,17 +638,21 @@ const Catalog = (() => {
         if (prod) {
           await new Promise(resolve => compressAndSet(imgFile, async b64 => {
             try {
+              // Thumbnail pequeño (~180px) que se guarda en Sheets (visible a todos los usuarios)
+              const thumb = await _compressThumb(b64);
               if (Auth.isAuthenticated()) {
-                const result = await Sync.uploadImageToDrive(prod.ref || `prod_${prod.id}`, b64);
-                setImage(prod.id, result.url, result.fileId);
-                // Cachear base64 por fileId para mostrar imagen inmediatamente
-                _driveImgCache.set(result.fileId, b64);
+                try {
+                  const result = await Sync.uploadImageToDrive(prod.ref || `prod_${prod.id}`, b64);
+                  setImage(prod.id, thumb, result.fileId);
+                  _driveImgCache.set(result.fileId, b64);
+                } catch(e) {
+                  setImage(prod.id, thumb, '');
+                }
               } else {
-                setImage(prod.id, b64, '');
+                setImage(prod.id, thumb, '');
               }
               matched++;
             } catch(e) {
-              setImage(prod.id, b64, '');
               matched++;
             }
             done++;

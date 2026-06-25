@@ -96,8 +96,11 @@ const Sync = (() => {
       const rows = [
         CONFIG.SHEET_COLUMNS,
         ...catalog.map(p => {
-          // Nunca guardar base64 en Sheets (supera el límite de 50,000 chars por celda)
-          const imgUrl = (p.imageUrl || '').startsWith('data:') ? '' : (p.imageUrl || '');
+          // Guardar thumbnails pequeños (data: URL ≤ 45000 chars) directamente en Sheets.
+          // Thumbnails de 180px/0.55q generan ~12-15K chars, bien bajo el límite de 50K.
+          // Solo eliminar si excede el límite de seguridad (imágenes grandes antiguas).
+          const raw = p.imageUrl || '';
+          const imgUrl = (raw.startsWith('data:') && raw.length > 45000) ? '' : raw;
           return [
             p.id, p.ref || '', p.nombre, p.marca || '',
             p.precio || 0, p.precio2 || 0, p.precio3 || 0,
