@@ -361,15 +361,13 @@ const Sync = (() => {
       );
 
       if (!r.ok) {
-        // Hoja no existe → crearla con el admin principal
-        await _initUsersSheet(
-          CONFIG.ADMIN_EMAIL,
-          isAdmin ? nombre : 'Administrador',
-          token
-        );
-        if (isAdmin) return { allowed: true, rol: 'admin' };
-        await _appendUser(email, nombre, 'vendedor', 'FALSE', token);
-        return { allowed: false, message: 'Acceso pendiente de aprobación. Contacta al administrador.' };
+        if (isAdmin) {
+          // Admin: intentar inicializar la hoja
+          try { await _initUsersSheet(CONFIG.ADMIN_EMAIL, nombre, token); } catch(e) {}
+          return { allowed: true, rol: 'admin' };
+        }
+        // Usuario sin acceso a la hoja — pendiente, el admin lo agrega manualmente
+        return { allowed: false, message: 'Acceso pendiente de aprobación. Comunícate con el administrador.' };
       }
 
       const data = await r.json();
@@ -378,23 +376,20 @@ const Sync = (() => {
 
       if (!validRows.length) {
         // Hoja vacía → solo el admin principal se auto-registra
-        await _initUsersSheet(
-          CONFIG.ADMIN_EMAIL,
-          isAdmin ? nombre : 'Administrador',
-          token
-        );
-        if (isAdmin) return { allowed: true, rol: 'admin' };
-        await _appendUser(email, nombre, 'vendedor', 'FALSE', token);
-        return { allowed: false, message: 'Acceso pendiente de aprobación. Contacta al administrador.' };
+        if (isAdmin) {
+          try { await _initUsersSheet(CONFIG.ADMIN_EMAIL, nombre, token); } catch(e) {}
+          return { allowed: true, rol: 'admin' };
+        }
+        return { allowed: false, message: 'Acceso pendiente de aprobación. Comunícate con el administrador.' };
       }
 
       const userRow = validRows.find(row => row[0].trim().toLowerCase() === email.trim().toLowerCase());
 
       if (!userRow) {
-        // Usuario nuevo → registrar como pendiente
-        await _appendUser(email, nombre, 'vendedor', 'FALSE', token);
         if (isAdmin) return { allowed: true, rol: 'admin' };
-        return { allowed: false, message: 'Acceso pendiente de aprobación. Contacta al administrador.' };
+        // Intentar registrar como pendiente, pero no fallar si la hoja es de solo lectura
+        try { await _appendUser(email, nombre, 'vendedor', 'FALSE', token); } catch(e) {}
+        return { allowed: false, message: 'Acceso pendiente de aprobación. Comunícate con el administrador.' };
       }
 
       // Admin siempre activo independiente de lo que diga la hoja
