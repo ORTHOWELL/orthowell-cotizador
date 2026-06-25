@@ -12,22 +12,41 @@ const App = (() => {
     if ('serviceWorker' in navigator) {
       const swReg = await navigator.serviceWorker.register('./sw.js').catch(() => null);
       if (swReg) {
+        // Forzar verificación de actualización en cada carga
+        swReg.update().catch(() => {});
+
+        const _showUpdateBanner = () => {
+          if (document.getElementById('sw-update-banner')) return;
+          const wrap = document.createElement('div');
+          wrap.id = 'sw-update-banner';
+          wrap.innerHTML =
+            '<div style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);' +
+            'background:#1a1a1a;color:#fff;padding:12px 20px;border-radius:10px;z-index:9999;' +
+            'font-size:13px;display:flex;gap:12px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,.5);white-space:nowrap;">' +
+            '<span>✓ App actualizada</span>' +
+            '<button onclick="location.reload()" style="background:var(--orange);color:#fff;border:none;' +
+            'padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;">Recargar ahora</button>' +
+            '<button onclick="this.closest(\'#sw-update-banner\').remove()" style="background:transparent;color:#aaa;' +
+            'border:none;cursor:pointer;font-size:16px;padding:0 4px;">✕</button>' +
+            '</div>';
+          document.body.appendChild(wrap);
+          // Auto-eliminar después de 60s si el usuario no recarga
+          setTimeout(() => wrap.remove(), 60000);
+        };
+
+        // Método principal: controllerchange se dispara cuando el nuevo SW toma el control
+        // Solo mostrar si había un SW anterior (no en la primera instalación)
+        const _prevController = navigator.serviceWorker.controller;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (_prevController) _showUpdateBanner();
+        });
+
+        // Método secundario: updatefound como respaldo (cuando el SW tarda más en activarse)
         swReg.addEventListener('updatefound', () => {
           const nw = swReg.installing;
-          if (!nw) return;
+          if (!nw || !navigator.serviceWorker.controller) return;
           nw.addEventListener('statechange', () => {
-            if (nw.state === 'activated') {
-              const b = document.createElement('div');
-              b.innerHTML = '<div style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);' +
-                'background:#1a1a1a;color:#fff;padding:12px 20px;border-radius:10px;z-index:9999;' +
-                'font-size:13px;display:flex;gap:12px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,.5);">' +
-                '<span>✓ App actualizada — recarga para aplicar</span>' +
-                '<button onclick="location.reload()" style="background:var(--orange);color:#fff;border:none;' +
-                'padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;">Recargar</button>' +
-                '</div>';
-              document.body.appendChild(b);
-              setTimeout(() => b.remove(), 30000);
-            }
+            if (nw.state === 'activated') _showUpdateBanner();
           });
         });
       }
