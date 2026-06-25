@@ -234,6 +234,7 @@ const Catalog = (() => {
   function _buildCard(p) {
     const card = document.createElement('div');
     card.className = 'catalog-card';
+    card.dataset.id = p.id;
 
     const imgWrap = document.createElement('div');
     imgWrap.className = 'catalog-card-img';
@@ -241,7 +242,17 @@ const Catalog = (() => {
       const im = document.createElement('img');
       im.alt = ''; im.loading = 'lazy';
       im.src = p.imageUrl;
-      im.onerror = () => { imgWrap.replaceChildren(Object.assign(document.createElement('span'), {textContent:'📦', style:'font-size:34px'})); };
+      // Si Drive aún no procesó el thumbnail, reintenta hasta 4 veces (Drive puede tardar ~30s)
+      let _retries = 0;
+      im.onerror = () => {
+        if (_retries < 4 && p.imageUrl && p.imageUrl.includes('drive.google.com')) {
+          _retries++;
+          const delay = _retries * 8000; // 8s, 16s, 24s, 32s
+          setTimeout(() => { im.src = p.imageUrl + '&_r=' + _retries; }, delay);
+        } else {
+          imgWrap.replaceChildren(Object.assign(document.createElement('span'), {textContent:'📦', style:'font-size:34px'}));
+        }
+      };
       imgWrap.appendChild(im);
     } else {
       imgWrap.appendChild(Object.assign(document.createElement('span'), {textContent:'📦', style:'font-size:34px'}));
@@ -303,8 +314,15 @@ const Catalog = (() => {
         try {
           toast('Subiendo imagen a Drive...', 'success');
           const result = await Sync.uploadImageToDrive(p.ref || `prod_${p.id}`, selected);
+          // Guardar URL de Drive para persistencia en Sheets
           setImage(target.catId, result.url, result.fileId);
-          _clearImageCache(); // borrar caché para que se vea la imagen nueva
+          _clearImageCache();
+          // Mostrar base64 INMEDIATAMENTE en la tarjeta (Drive tarda ~30s en procesar el thumbnail)
+          // Restaurar URL de Drive justo después para que el sync a Sheets use la URL correcta
+          p.imageUrl = selected;
+          renderCatalog(document.getElementById('cat-search')?.value || '');
+          p.imageUrl = result.url;
+          return;
         } catch(e) {
           console.warn('Drive upload failed, using local:', e);
           setImage(target.catId, selected, '');
