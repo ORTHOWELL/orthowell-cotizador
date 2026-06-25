@@ -240,12 +240,15 @@ const Sync = (() => {
     if (!r.ok) throw new Error(`Drive upload ${r.status}: ${await r.text()}`);
     const file = await r.json();
 
-    // Hacer el archivo públicamente legible (para mostrar en la app sin auth)
-    await fetch(`${DRIVE_BASE}/${file.id}/permissions`, {
+    // Hacer el archivo públicamente legible (para que todos los usuarios vean las imágenes)
+    const permR = await fetch(`${DRIVE_BASE}/${file.id}/permissions`, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ role: 'reader', type: 'anyone' })
     });
+    if (!permR.ok) {
+      console.warn(`[Drive] Permiso público falló (${permR.status}) para ${file.id} — imagen solo visible para el admin.`);
+    }
 
     return {
       fileId: file.id,

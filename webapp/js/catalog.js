@@ -268,26 +268,40 @@ const Catalog = (() => {
     return m ? m[1] : null;
   }
 
-  // Carga imagen de Drive siempre via API autenticada (garantizado, sin depender de URLs públicas)
+  // Carga imagen de Drive:
+  // 1. Usa <img> con URL de thumbnail (navegador usa cookies de Google, funciona para archivos públicos)
+  // 2. Si falla, descarga con token OAuth (fallback para admin / archivos privados)
   function _loadDriveImg(im, url, fileId, wrap) {
     const _placeholder = () => wrap.replaceChildren(
       Object.assign(document.createElement('span'), { textContent: '📦', style: 'font-size:34px' })
     );
 
-    // Usar fileId explícito o extraerlo de la URL de thumbnail
     const id = fileId || _fileIdFromUrl(url);
 
-    if (id && Auth.isAuthenticated()) {
-      // Drive API con token (funciona aunque el archivo no sea público)
-      _fetchDriveBlob(id)
-        .then(src => { im.onerror = _placeholder; im.src = src; })
-        .catch(() => {
-          if (url) { im.src = url; im.onerror = _placeholder; }
-          else _placeholder();
-        });
-    } else if (url) {
-      im.src = url;
+    // Si ya está en caché (base64 o blob URL), usar inmediatamente
+    if (id && _driveImgCache.has(id)) {
+      im.src = _driveImgCache.get(id);
       im.onerror = _placeholder;
+      return;
+    }
+
+    // Intentar thumbnail URL directa (funciona si el archivo es público)
+    const thumbUrl = id
+      ? `https://drive.google.com/thumbnail?id=${id}&sz=w800`
+      : url;
+
+    if (thumbUrl) {
+      im.src = thumbUrl;
+      im.onerror = () => {
+        // Fallback: Drive API con token del usuario (funciona para el admin/dueño del archivo)
+        if (id && Auth.isAuthenticated()) {
+          _fetchDriveBlob(id)
+            .then(src => { im.onerror = _placeholder; im.src = src; })
+            .catch(_placeholder);
+        } else {
+          _placeholder();
+        }
+      };
     } else {
       _placeholder();
     }
