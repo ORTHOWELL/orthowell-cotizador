@@ -95,12 +95,16 @@ const Sync = (() => {
       // 2. Escribir encabezado + datos
       const rows = [
         CONFIG.SHEET_COLUMNS,
-        ...catalog.map(p => [
-          p.id, p.ref || '', p.nombre, p.marca || '',
-          p.precio || 0, p.precio2 || 0, p.precio3 || 0,
-          p.costo || 0, p.iva || 0, p.saldo || 0,
-          p.imageUrl || '', p.driveFileId || ''
-        ])
+        ...catalog.map(p => {
+          // Nunca guardar base64 en Sheets (supera el límite de 50,000 chars por celda)
+          const imgUrl = (p.imageUrl || '').startsWith('data:') ? '' : (p.imageUrl || '');
+          return [
+            p.id, p.ref || '', p.nombre, p.marca || '',
+            p.precio || 0, p.precio2 || 0, p.precio3 || 0,
+            p.costo || 0, p.iva || 0, p.saldo || 0,
+            imgUrl, p.driveFileId || ''
+          ];
+        })
       ];
 
       const r = await fetch(
