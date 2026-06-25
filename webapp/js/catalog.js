@@ -622,10 +622,18 @@ const Catalog = (() => {
       }
 
       renderCatalog(document.getElementById('cat-search')?.value || '');
-      // Guardar inmediatamente en Sheets (no esperar el debounce de 1.5s)
+      // Guardar en Sheets: cancelar debounce pendiente y guardar una sola vez
       if (matched > 0) {
+        clearTimeout(_syncTimer);
+        _syncTimer = null;
         status.innerHTML = `<span class="loading-spin"></span> Guardando en Sheets...`;
-        try { await Sync.saveCatalogToSheets(_catalog); } catch(e) { console.warn('ZIP save:', e); }
+        try {
+          await Sync.saveCatalogToSheets(_catalog, { silent: true });
+        } catch(e) {
+          console.warn('ZIP save:', e);
+          // Si falla, programar reintento via debounce normal
+          _syncSave();
+        }
       }
       status.textContent = `✅ ${matched} imágenes asignadas · ${notFound} sin coincidencia`;
       toast(`✅ ZIP: ${matched} imágenes cargadas`, 'success');

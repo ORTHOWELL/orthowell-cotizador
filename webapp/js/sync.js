@@ -59,17 +59,22 @@ const Sync = (() => {
   }
 
   // ── SHEETS: GUARDAR CATÁLOGO COMPLETO ────────────────────────────
-  async function saveCatalogToSheets(catalog) {
+  // silent=true: no muestra el indicador de error (para guardados en background)
+  async function saveCatalogToSheets(catalog, { silent = false } = {}) {
     if (CONFIG.SPREADSHEET_ID.startsWith('TODO')) return;
-    setSyncStatus('syncing', 'Guardando...');
+    if (!silent) setSyncStatus('syncing', 'Guardando...');
     try {
       const token = await Auth.ensureToken();
 
       // 1. Limpiar hoja
-      await fetch(
+      const clearR = await fetch(
         `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.SHEET_NAME}:clear`,
         { method: 'POST', headers: { Authorization: 'Bearer ' + token } }
       );
+      if (!clearR.ok) {
+        if (clearR.status === 403) { setSyncStatus('', '✓ Local'); return; }
+        throw new Error(`Sheets clear ${clearR.status}`);
+      }
 
       // 2. Escribir encabezado + datos
       const rows = [
@@ -91,13 +96,13 @@ const Sync = (() => {
         }
       );
       if (!r.ok) {
-        if (r.status === 403) { setSyncStatus('', '✓ Local'); return; } // sin acceso de escritura
+        if (r.status === 403) { setSyncStatus('', '✓ Local'); return; }
         throw new Error(`Sheets write ${r.status}: ${await r.text()}`);
       }
       setSyncStatus('', `✓ ${catalog.length} guardados`);
     } catch(e) {
       console.error('saveCatalogToSheets:', e);
-      setSyncStatus('error', 'Error al guardar');
+      if (!silent) setSyncStatus('error', 'Error al guardar');
       throw e;
     }
   }
