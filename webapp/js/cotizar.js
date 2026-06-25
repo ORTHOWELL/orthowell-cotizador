@@ -284,15 +284,24 @@ function consultaBuscar(q) {
     item.className = 'consulta-list-item';
     item.dataset.id = p.id;
     item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-radius:8px;transition:background .12s;border:1.5px solid var(--border-light);background:var(--white);min-width:220px;max-width:320px;flex:1;';
-    item.innerHTML =
-      `<div class="consulta-list-thumb">${p.imageUrl
-        ? `<img src="${escH(p.imageUrl)}" alt="" loading="lazy">`
-        : '📦'}</div>` +
-      `<div style="flex:1;min-width:0;">
-        <div style="font-weight:700;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escH(p.nombre)}</div>
-        <div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;">${escH(p.ref||'')}</div>
-        <div style="font-size:12px;font-weight:700;color:var(--orange);">${fCOP(p.precio||0)}</div>
-      </div>`;
+    const thumbWrap = document.createElement('div');
+    thumbWrap.className = 'consulta-list-thumb';
+    if (p.imageUrl || p.driveFileId) {
+      const im = document.createElement('img');
+      im.alt = ''; im.loading = 'lazy';
+      Catalog.loadImage(im, p.imageUrl, p.driveFileId, thumbWrap);
+      thumbWrap.appendChild(im);
+    } else {
+      thumbWrap.textContent = '📦';
+    }
+    item.appendChild(thumbWrap);
+    const info = document.createElement('div');
+    info.style.cssText = 'flex:1;min-width:0;';
+    info.innerHTML =
+      `<div style="font-weight:700;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escH(p.nombre)}</div>` +
+      `<div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;">${escH(p.ref||'')}</div>` +
+      `<div style="font-size:12px;font-weight:700;color:var(--orange);">${fCOP(p.precio||0)}</div>`;
+    item.appendChild(info);
     item.onmouseenter = () => { if (!item.classList.contains('active')) item.style.background = 'var(--orange-light)'; };
     item.onmouseleave = () => { if (!item.classList.contains('active')) item.style.background = 'var(--white)'; };
     item.onclick = () => consultaMostrarDetalle(p, item);
@@ -322,11 +331,12 @@ function consultaMostrarDetalle(p, itemEl) {
   const margen   = (p.precio > 0 && p.costo > 0) ? ((p.precio - p.costo) / p.precio * 100).toFixed(1) : null;
   const utilidad = (p.precio > 0 && p.costo > 0) ? fCOP(p.precio - p.costo) : null;
 
-  document.getElementById('consulta-detail').innerHTML = `
+  const detailEl = document.getElementById('consulta-detail');
+  detailEl.innerHTML = `
     <div class="consulta-result">
       <div class="consulta-hero">
-        <div class="consulta-img">
-          ${p.imageUrl ? `<img src="${escH(p.imageUrl)}" alt="">` : '📦'}
+        <div class="consulta-img" id="consulta-img-wrap" style="${(p.imageUrl||p.driveFileId)?'cursor:zoom-in;':''}" title="${(p.imageUrl||p.driveFileId)?'Clic para ampliar':''}">
+          ${!(p.imageUrl||p.driveFileId) ? '📦' : ''}
         </div>
         <div style="flex:1;min-width:0;">
           <div class="consulta-name">${escH(p.nombre)}</div>
@@ -387,6 +397,20 @@ function consultaMostrarDetalle(p, itemEl) {
         </div>`}
       </div>
     </div>`;
+
+  // Cargar imagen con autenticación Drive y habilitar clic para ampliar
+  if (p.imageUrl || p.driveFileId) {
+    const imgWrap = document.getElementById('consulta-img-wrap');
+    const im = document.createElement('img');
+    im.alt = '';
+    im.style.cssText = 'width:100%;height:100%;object-fit:contain;border-radius:8px;display:block;';
+    Catalog.loadImage(im, p.imageUrl, p.driveFileId, imgWrap);
+    imgWrap.appendChild(im);
+    imgWrap.onclick = () => {
+      const src = im.src || p.imageUrl;
+      if (src && !src.startsWith('data:,')) abrirLightbox(src);
+    };
+  }
 }
 
 function consultaAgregarCot(id) {

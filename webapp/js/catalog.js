@@ -837,6 +837,7 @@ const Catalog = (() => {
     deleteProduct,
     renderCatalog,
     confirmarImg,
+    loadImage: _loadDriveImg,
     importarSistemaContable,
     importarExcel,
     exportarExcel,

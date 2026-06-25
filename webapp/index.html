@@ -623,5 +623,11 @@
 <script src="./js/pdf.js"></script>
 <script src="./js/app.js"></script>
 
+<!-- ══ LIGHTBOX IMAGEN ════════════════════════════════════════════ -->
+<div id="img-lightbox" onclick="cerrarLightbox()" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.88);align-items:center;justify-content:center;cursor:zoom-out;">
+  <img id="img-lightbox-img" alt="" style="max-width:92vw;max-height:88vh;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,0.6);object-fit:contain;">
+  <button onclick="cerrarLightbox()" style="position:fixed;top:18px;right:22px;background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:28px;line-height:1;width:42px;height:42px;border-radius:50%;cursor:pointer;">✕</button>
+</div>
+
 </body>
 </html>

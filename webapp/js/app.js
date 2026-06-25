@@ -486,5 +486,24 @@ const App = (() => {
 // ── FUNCIONES GLOBALES REQUERIDAS POR EL HTML ─────────────────────
 function generarPDF()    { Pdf.generarPDF(); }
 
+// ── LIGHTBOX DE IMAGEN ────────────────────────────────────────────
+function abrirLightbox(src) {
+  if (!src) return;
+  const lb  = document.getElementById('img-lightbox');
+  const img = document.getElementById('img-lightbox-img');
+  img.src = src;
+  lb.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function cerrarLightbox() {
+  const lb = document.getElementById('img-lightbox');
+  lb.style.display = 'none';
+  document.getElementById('img-lightbox-img').src = '';
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') cerrarLightbox();
+});
+
 // Iniciar app cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', () => App.init());
