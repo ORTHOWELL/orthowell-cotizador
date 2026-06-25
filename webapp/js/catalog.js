@@ -231,36 +231,57 @@ const Catalog = (() => {
     if (_page * PAGE_SIZE < _filtered.length) requestAnimationFrame(_renderPage);
   }
 
-  // Caché en memoria de URLs de Drive → object URLs (dura lo que dure la sesión)
+  // Caché en memoria: driveFileId → objectURL o base64 (dura la sesión)
   const _driveImgCache = new Map();
 
-  // Carga una imagen de Drive: primero directo, si falla usa el token OAuth
-  function _loadDriveImg(im, url, wrap) {
-    im.src = url;
-    im.onerror = async () => {
-      if (!url || !url.includes('drive.google.com') || !Auth.isAuthenticated()) {
-        wrap.replaceChildren(Object.assign(document.createElement('span'), { textContent: '📦', style: 'font-size:34px' }));
-        return;
-      }
-      // Revisar caché de sesión primero
-      if (_driveImgCache.has(url)) {
-        im.onerror = null;
-        im.src = _driveImgCache.get(url);
-        return;
-      }
-      try {
-        const token = await Auth.ensureToken();
-        const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-        if (!r.ok) throw new Error(r.status);
-        const blob = await r.blob();
-        const objUrl = URL.createObjectURL(blob);
-        _driveImgCache.set(url, objUrl);
-        im.onerror = null;
-        im.src = objUrl;
-      } catch(e) {
-        wrap.replaceChildren(Object.assign(document.createElement('span'), { textContent: '📦', style: 'font-size:34px' }));
-      }
-    };
+  // Descarga un archivo de Drive usando la API autenticada (garantizado para nuestros archivos)
+  async function _fetchDriveBlob(fileId) {
+    if (_driveImgCache.has(fileId)) return _driveImgCache.get(fileId);
+    const token = await Auth.ensureToken();
+    const r = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (!r.ok) throw new Error(`Drive ${r.status}`);
+    const blob = await r.blob();
+    const objUrl = URL.createObjectURL(blob);
+    _driveImgCache.set(fileId, objUrl);
+    return objUrl;
+  }
+
+  // Carga imagen: intenta URL directa; si falla y hay fileId, descarga vía API autenticada
+  function _loadDriveImg(im, url, fileId, wrap) {
+    const _placeholder = () => wrap.replaceChildren(
+      Object.assign(document.createElement('span'), { textContent: '📦', style: 'font-size:34px' })
+    );
+    // Si ya está en caché, usar inmediatamente
+    if (fileId && _driveImgCache.has(fileId)) {
+      im.src = _driveImgCache.get(fileId);
+      im.onerror = _placeholder;
+      return;
+    }
+    if (url) {
+      im.src = url;
+      im.onerror = () => {
+        if (fileId && Auth.isAuthenticated()) {
+          // Fallback: descargar con API de Drive (funciona siempre para archivos propios)
+          _fetchDriveBlob(fileId).then(src => {
+            im.onerror = _placeholder;
+            im.src = src;
+          }).catch(_placeholder);
+        } else {
+          _placeholder();
+        }
+      };
+    } else if (fileId && Auth.isAuthenticated()) {
+      // Sin URL thumbnail pero tenemos fileId → descargar directo
+      _fetchDriveBlob(fileId).then(src => {
+        im.onerror = _placeholder;
+        im.src = src;
+      }).catch(_placeholder);
+    } else {
+      _placeholder();
+    }
   }
 
   function _buildCard(p) {
@@ -270,10 +291,10 @@ const Catalog = (() => {
 
     const imgWrap = document.createElement('div');
     imgWrap.className = 'catalog-card-img';
-    if (p.imageUrl) {
+    if (p.imageUrl || p.driveFileId) {
       const im = document.createElement('img');
       im.alt = ''; im.loading = 'lazy';
-      _loadDriveImg(im, p.imageUrl, imgWrap);
+      _loadDriveImg(im, p.imageUrl, p.driveFileId, imgWrap);
       imgWrap.appendChild(im);
     } else {
       imgWrap.appendChild(Object.assign(document.createElement('span'), { textContent: '📦', style: 'font-size:34px' }));
@@ -337,8 +358,8 @@ const Catalog = (() => {
           const result = await Sync.uploadImageToDrive(p.ref || `prod_${p.id}`, selected);
           setImage(target.catId, result.url, result.fileId);
           _clearImageCache();
-          // Cachear el base64 como object URL para que _loadDriveImg lo use inmediatamente
-          _driveImgCache.set(result.url, selected);
+          // Cachear base64 por fileId para mostrar imagen inmediatamente
+          _driveImgCache.set(result.fileId, selected);
           // Actualizar SOLO la tarjeta afectada en el DOM (evita re-renderizar todo el catálogo)
           const cardWrap = document.querySelector(`.catalog-card[data-id="${target.catId}"] .catalog-card-img`);
           if (cardWrap) {
@@ -580,8 +601,8 @@ const Catalog = (() => {
               if (Auth.isAuthenticated()) {
                 const result = await Sync.uploadImageToDrive(prod.ref || `prod_${prod.id}`, b64);
                 setImage(prod.id, result.url, result.fileId);
-                // Cachear base64 para mostrar imagen inmediatamente sin esperar a Drive
-                _driveImgCache.set(result.url, b64);
+                // Cachear base64 por fileId para mostrar imagen inmediatamente
+                _driveImgCache.set(result.fileId, b64);
               } else {
                 setImage(prod.id, b64, '');
               }
@@ -601,6 +622,11 @@ const Catalog = (() => {
       }
 
       renderCatalog(document.getElementById('cat-search')?.value || '');
+      // Guardar inmediatamente en Sheets (no esperar el debounce de 1.5s)
+      if (matched > 0) {
+        status.innerHTML = `<span class="loading-spin"></span> Guardando en Sheets...`;
+        try { await Sync.saveCatalogToSheets(_catalog); } catch(e) { console.warn('ZIP save:', e); }
+      }
       status.textContent = `✅ ${matched} imágenes asignadas · ${notFound} sin coincidencia`;
       toast(`✅ ZIP: ${matched} imágenes cargadas`, 'success');
     };
