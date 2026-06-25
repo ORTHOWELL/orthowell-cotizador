@@ -9,6 +9,7 @@ const Sync = (() => {
   const DRIVE_BASE   = 'https://www.googleapis.com/drive/v3/files';
   let _folderId = localStorage.getItem(CONFIG.DRIVE_FOLDER_ID_KEY) || null;
   let _isSyncing = false;
+  let _isSaving  = false; // guard para evitar guardados simultáneos
 
   // ── SHEETS: LEER CATÁLOGO ────────────────────────────────────────
   async function loadFromSheets() {
@@ -19,13 +20,26 @@ const Sync = (() => {
       const url = `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.SHEET_NAME}!A:L`;
       const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
       if (!r.ok) {
-        if (r.status === 404) return null; // Sheet no inicializado aún
-        if (r.status === 403) {
-          // Sin acceso a la hoja (usuario sin permiso) → usar caché local silenciosamente
-          setSyncStatus('', '✓ Local');
-          return null;
+        if (r.status === 404) return null;
+        if (r.status === 403) { setSyncStatus('', '✓ Local'); return null; }
+        if (r.status === 429) {
+          // Rate limit → esperar 6s y reintentar una vez
+          setSyncStatus('', '⏳ Esperando...');
+          await new Promise(res => setTimeout(res, 6000));
+          const r2 = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+          if (!r2.ok) { setSyncStatus('', '✓ Local'); return null; }
+          const d2 = await r2.json();
+          const rows2 = (d2.values || []).slice(1).filter(row => row[0]);
+          setSyncStatus('', `✓ ${rows2.length} productos`);
+          return rows2.map(row => ({
+            id: parseInt(row[0])||0, ref: row[1]||'', nombre: row[2]||'', marca: row[3]||'',
+            precio: parseFloat(row[4])||0, precio2: parseFloat(row[5])||0, precio3: parseFloat(row[6])||0,
+            costo: parseFloat(row[7])||0, iva: parseFloat(row[8])||0, saldo: parseFloat(row[9])||0,
+            imageUrl: row[10]||'', driveFileId: row[11]||'',
+          }));
         }
-        throw new Error(`Sheets API ${r.status}: ${await r.text()}`);
+        setSyncStatus('', '✓ Local');
+        return null; // cualquier otro error → usar caché local silenciosamente
       }
       const data = await r.json();
       const rows = data.values || [];
@@ -62,6 +76,8 @@ const Sync = (() => {
   // silent=true: no muestra el indicador de error (para guardados en background)
   async function saveCatalogToSheets(catalog, { silent = false } = {}) {
     if (CONFIG.SPREADSHEET_ID.startsWith('TODO')) return;
+    if (_isSaving) return; // evitar guardados simultáneos
+    _isSaving = true;
     if (!silent) setSyncStatus('syncing', 'Guardando...');
     try {
       const token = await Auth.ensureToken();
@@ -104,6 +120,8 @@ const Sync = (() => {
       console.error('saveCatalogToSheets:', e);
       if (!silent) setSyncStatus('error', 'Error al guardar');
       throw e;
+    } finally {
+      _isSaving = false;
     }
   }
 
@@ -330,28 +348,33 @@ const Sync = (() => {
 
   // ── SYNC MANUAL ─────────────────────────────────────────────────
   async function syncNow() {
-    if (_isSyncing) return;
+    if (_isSyncing || _isSaving) return;
     _isSyncing = true;
     try {
       setSyncStatus('syncing', 'Sincronizando...');
-      const remote = await loadFromSheets();
+      const remote = await loadFromSheets(); // ya maneja 403/429 sin lanzar
       const local = Catalog.getAll ? Catalog.getAll() : [];
 
-      if (remote !== null && remote.length === 0 && local.length > 0) {
-        // Sheets vacío pero hay datos locales → subir a Sheets
+      if (remote === null) {
+        // Sin acceso o error de red → mantener local, no mostrar error
+        setSyncStatus('', '✓ Local');
+        return;
+      }
+      if (remote.length === 0 && local.length > 0) {
+        // Sheets vacío → subir datos locales
         await saveCatalogToSheets(local);
         toast(`✓ ${local.length} productos guardados en Sheets`, 'success');
-        setSyncStatus('', `✓ ${local.length} guardados`);
-      } else if (remote !== null && remote.length > 0) {
-        // Sheets tiene datos → bajar y actualizar local
+      } else if (remote.length > 0) {
+        // Sheets tiene datos → actualizar local
         Catalog.setFromRemote(remote);
         renderCatalog(document.getElementById('cat-search')?.value || '');
-        toast('✓ Catálogo sincronizado desde Sheets', 'success');
+        toast('✓ Catálogo sincronizado', 'success');
         setSyncStatus('', `✓ ${remote.length} productos`);
       }
     } catch(e) {
-      toast('Error al sincronizar: ' + e.message, 'error');
-      setSyncStatus('error', 'Error');
+      console.error('syncNow:', e);
+      toast('No se pudo sincronizar, usando datos locales', 'error');
+      setSyncStatus('', '✓ Local');
     } finally {
       _isSyncing = false;
     }
