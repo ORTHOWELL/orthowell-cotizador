@@ -65,7 +65,19 @@ const Catalog = (() => {
 
   // ── SETTERS ─────────────────────────────────────────────────────
   function setFromRemote(remote) {
-    _catalog = _migrate(remote);
+    const localMap = new Map(_catalog.map(p => [p.id, p]));
+    const migrated = _migrate(remote);
+    // Conservar imageUrl/driveFileId locales si Sheets los tiene vacíos
+    // (evita que un sync borre imágenes recién subidas que aún no se guardaron)
+    _catalog = migrated.map(p => {
+      if (!p.imageUrl && !p.driveFileId) {
+        const local = localMap.get(p.id);
+        if (local && (local.imageUrl || local.driveFileId)) {
+          return { ...p, imageUrl: local.imageUrl || '', driveFileId: local.driveFileId || '' };
+        }
+      }
+      return p;
+    });
     _saveCache();
   }
 
@@ -625,11 +637,10 @@ const Catalog = (() => {
         _syncTimer = null;
         status.innerHTML = `<span class="loading-spin"></span> Guardando en Sheets...`;
         try {
-          await Sync.saveCatalogToSheets(_catalog, { silent: true });
+          await Sync.saveCatalogToSheets(_catalog);
         } catch(e) {
-          console.warn('ZIP save:', e);
-          // Si falla, programar reintento via debounce normal
-          _syncSave();
+          console.error('ZIP save error:', e);
+          toast('Error guardando en Sheets: ' + e.message, 'error');
         }
       }
       status.textContent = `✅ ${matched} imágenes asignadas · ${notFound} sin coincidencia`;
