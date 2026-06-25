@@ -231,6 +231,38 @@ const Catalog = (() => {
     if (_page * PAGE_SIZE < _filtered.length) requestAnimationFrame(_renderPage);
   }
 
+  // Caché en memoria de URLs de Drive → object URLs (dura lo que dure la sesión)
+  const _driveImgCache = new Map();
+
+  // Carga una imagen de Drive: primero directo, si falla usa el token OAuth
+  function _loadDriveImg(im, url, wrap) {
+    im.src = url;
+    im.onerror = async () => {
+      if (!url || !url.includes('drive.google.com') || !Auth.isAuthenticated()) {
+        wrap.replaceChildren(Object.assign(document.createElement('span'), { textContent: '📦', style: 'font-size:34px' }));
+        return;
+      }
+      // Revisar caché de sesión primero
+      if (_driveImgCache.has(url)) {
+        im.onerror = null;
+        im.src = _driveImgCache.get(url);
+        return;
+      }
+      try {
+        const token = await Auth.ensureToken();
+        const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+        if (!r.ok) throw new Error(r.status);
+        const blob = await r.blob();
+        const objUrl = URL.createObjectURL(blob);
+        _driveImgCache.set(url, objUrl);
+        im.onerror = null;
+        im.src = objUrl;
+      } catch(e) {
+        wrap.replaceChildren(Object.assign(document.createElement('span'), { textContent: '📦', style: 'font-size:34px' }));
+      }
+    };
+  }
+
   function _buildCard(p) {
     const card = document.createElement('div');
     card.className = 'catalog-card';
@@ -241,21 +273,10 @@ const Catalog = (() => {
     if (p.imageUrl) {
       const im = document.createElement('img');
       im.alt = ''; im.loading = 'lazy';
-      im.src = p.imageUrl;
-      // Si Drive aún no procesó el thumbnail, reintenta hasta 4 veces (Drive puede tardar ~30s)
-      let _retries = 0;
-      im.onerror = () => {
-        if (_retries < 4 && p.imageUrl && p.imageUrl.includes('drive.google.com')) {
-          _retries++;
-          const delay = _retries * 8000; // 8s, 16s, 24s, 32s
-          setTimeout(() => { im.src = p.imageUrl + '&_r=' + _retries; }, delay);
-        } else {
-          imgWrap.replaceChildren(Object.assign(document.createElement('span'), {textContent:'📦', style:'font-size:34px'}));
-        }
-      };
+      _loadDriveImg(im, p.imageUrl, imgWrap);
       imgWrap.appendChild(im);
     } else {
-      imgWrap.appendChild(Object.assign(document.createElement('span'), {textContent:'📦', style:'font-size:34px'}));
+      imgWrap.appendChild(Object.assign(document.createElement('span'), { textContent: '📦', style: 'font-size:34px' }));
     }
 
     const ov = document.createElement('div');
@@ -314,14 +335,26 @@ const Catalog = (() => {
         try {
           toast('Subiendo imagen a Drive...', 'success');
           const result = await Sync.uploadImageToDrive(p.ref || `prod_${p.id}`, selected);
-          // Guardar URL de Drive para persistencia en Sheets
           setImage(target.catId, result.url, result.fileId);
           _clearImageCache();
-          // Mostrar base64 INMEDIATAMENTE en la tarjeta (Drive tarda ~30s en procesar el thumbnail)
-          // Restaurar URL de Drive justo después para que el sync a Sheets use la URL correcta
-          p.imageUrl = selected;
-          renderCatalog(document.getElementById('cat-search')?.value || '');
-          p.imageUrl = result.url;
+          // Cachear el base64 como object URL para que _loadDriveImg lo use inmediatamente
+          _driveImgCache.set(result.url, selected);
+          // Actualizar SOLO la tarjeta afectada en el DOM (evita re-renderizar todo el catálogo)
+          const cardWrap = document.querySelector(`.catalog-card[data-id="${target.catId}"] .catalog-card-img`);
+          if (cardWrap) {
+            const im = cardWrap.querySelector('img') || (() => {
+              const i = document.createElement('img'); i.alt = '';
+              cardWrap.innerHTML = ''; cardWrap.appendChild(i);
+              const ov = cardWrap.parentElement?.querySelector('.img-overlay');
+              if (!ov) {
+                const o = document.createElement('div'); o.className = 'img-overlay';
+                o.innerHTML = `<button class="img-overlay-btn" onclick="abrirImgModal('catalog',${target.catId},null)">📁 Subir foto</button><button class="img-overlay-btn" onclick="abrirImgModalBuscar(${target.catId})">🔍 Buscar</button>`;
+                cardWrap.appendChild(o);
+              }
+              return i;
+            })();
+            im.src = selected;
+          }
           return;
         } catch(e) {
           console.warn('Drive upload failed, using local:', e);
