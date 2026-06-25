@@ -20,6 +20,11 @@ const Sync = (() => {
       const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
       if (!r.ok) {
         if (r.status === 404) return null; // Sheet no inicializado aún
+        if (r.status === 403) {
+          // Sin acceso a la hoja (usuario sin permiso) → usar caché local silenciosamente
+          setSyncStatus('', '✓ Local');
+          return null;
+        }
         throw new Error(`Sheets API ${r.status}: ${await r.text()}`);
       }
       const data = await r.json();
@@ -85,7 +90,10 @@ const Sync = (() => {
           body: JSON.stringify({ values: rows })
         }
       );
-      if (!r.ok) throw new Error(`Sheets write ${r.status}: ${await r.text()}`);
+      if (!r.ok) {
+        if (r.status === 403) { setSyncStatus('', '✓ Local'); return; } // sin acceso de escritura
+        throw new Error(`Sheets write ${r.status}: ${await r.text()}`);
+      }
       setSyncStatus('', `✓ ${catalog.length} guardados`);
     } catch(e) {
       console.error('saveCatalogToSheets:', e);
