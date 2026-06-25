@@ -249,23 +249,31 @@ const Catalog = (() => {
     return objUrl;
   }
 
+  // Extrae el fileId de una URL de thumbnail de Drive
+  function _fileIdFromUrl(url) {
+    if (!url) return null;
+    const m = url.match(/[?&]id=([^&]+)/);
+    return m ? m[1] : null;
+  }
+
   // Carga imagen de Drive siempre via API autenticada (garantizado, sin depender de URLs públicas)
   function _loadDriveImg(im, url, fileId, wrap) {
     const _placeholder = () => wrap.replaceChildren(
       Object.assign(document.createElement('span'), { textContent: '📦', style: 'font-size:34px' })
     );
 
-    if (fileId && Auth.isAuthenticated()) {
-      // Primario: Drive API con token (no depende de permisos públicos ni del SW)
-      _fetchDriveBlob(fileId)
+    // Usar fileId explícito o extraerlo de la URL de thumbnail
+    const id = fileId || _fileIdFromUrl(url);
+
+    if (id && Auth.isAuthenticated()) {
+      // Drive API con token (funciona aunque el archivo no sea público)
+      _fetchDriveBlob(id)
         .then(src => { im.onerror = _placeholder; im.src = src; })
         .catch(() => {
-          // Si falla el API, intentar URL de thumbnail directa como último recurso
           if (url) { im.src = url; im.onerror = _placeholder; }
           else _placeholder();
         });
     } else if (url) {
-      // Sin fileId: intentar URL directa
       im.src = url;
       im.onerror = _placeholder;
     } else {
