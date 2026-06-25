@@ -607,6 +607,8 @@
     <div class="modal-footer">
       <button class="btn btn-primary" onclick="App.saveProfile()">Guardar perfil</button>
       <button class="btn btn-outline" onclick="document.getElementById('modal-perfil').classList.remove('open')">Cancelar</button>
+      <button class="btn btn-outline" onclick="App.forceUpdate()" title="Borra el caché del navegador y recarga la app desde cero"
+        style="margin-left:auto;font-size:11px;color:var(--muted);border-color:var(--border-light);">⟳ Actualizar app</button>
     </div>
   </div>
 </div>

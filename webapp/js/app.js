@@ -459,10 +459,25 @@ const App = (() => {
     }
   }
 
+  // ── FORZAR ACTUALIZACIÓN COMPLETA ────────────────────────────────
+  async function forceUpdate() {
+    toast('Limpiando caché y actualizando...', 'success');
+    try {
+      // Borrar todos los cachés del SW
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+      // Desregistrar el SW para que la próxima carga lo reinstale limpio
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    } catch(e) { console.warn('forceUpdate:', e); }
+    location.reload(true);
+  }
+
   return {
     init, afterAuth, onLogout,
     openUsersModal, _changeUser, addUserManual,
     openProfileModal, saveProfile,
+    forceUpdate,
     getProfile: () => _profile,
     getRol: () => _rol,
   };
