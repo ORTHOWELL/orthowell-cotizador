@@ -54,7 +54,7 @@ function addFromCatalog(id) {
   if (!p) return;
   const ex = window._cotItems.find(i => i.nombre === p.nombre);
   if (ex) ex.cant++;
-  else window._cotItems.push({ nombre: p.nombre, ref: p.ref || '', cant: 1, precio: p.precio, obs: '', imageUrl: p.imageUrl || '', driveFileId: p.driveFileId || '' });
+  else window._cotItems.push({ nombre: p.nombre, ref: p.ref || '', cant: 1, precio: p.precio, iva: p.iva || 0, obs: '', imageUrl: p.imageUrl || '', driveFileId: p.driveFileId || '' });
   document.getElementById('search-input').value = '';
   document.getElementById('search-results').classList.remove('visible');
   renderItems();
@@ -79,7 +79,7 @@ function agregarManual(guardarEnCatalogo) {
 
   const ex = window._cotItems.find(i => i.nombre === nombre);
   if (ex) ex.cant += cant;
-  else window._cotItems.push({ nombre, ref, cant, precio, obs, imageUrl: '' });
+  else window._cotItems.push({ nombre, ref, cant, precio, iva: 0, obs, imageUrl: '' });
 
   if (guardarEnCatalogo) {
     const catalog = Catalog.getAll();
@@ -181,7 +181,18 @@ function renderItems() {
       tdTotal.textContent = fCOP(window._cotItems[idx].cant * window._cotItems[idx].precio);
       updateSummary();
     };
-    const tdPrecio = document.createElement('td'); tdPrecio.appendChild(inpPrecio);
+    const tdPrecio = document.createElement('td');
+    tdPrecio.appendChild(inpPrecio);
+    const ivaBadge = document.createElement('div');
+    ivaBadge.style.cssText = 'font-size:9px;font-weight:700;margin-top:2px;text-align:center;letter-spacing:.3px;';
+    if ((item.iva || 0) > 0) {
+      ivaBadge.style.color = '#2d8a4e';
+      ivaBadge.textContent = `IVA ${item.iva}% incl.`;
+    } else {
+      ivaBadge.style.color = '#aaa';
+      ivaBadge.textContent = 'Sin IVA';
+    }
+    tdPrecio.appendChild(ivaBadge);
 
     const tdTotal = document.createElement('td');
     tdTotal.style.cssText = 'font-weight:700;color:var(--orange);';
@@ -421,6 +432,6 @@ function consultaAgregarCot(id) {
   if (!p) return;
   const ex = window._cotItems.find(i => i.nombre === p.nombre);
   if (ex) ex.cant++;
-  else window._cotItems.push({ nombre: p.nombre, ref: p.ref||'', cant: 1, precio: p.precio||0, obs: '', imageUrl: p.imageUrl||'', driveFileId: p.driveFileId||'' });
+  else window._cotItems.push({ nombre: p.nombre, ref: p.ref||'', cant: 1, precio: p.precio||0, iva: p.iva||0, obs: '', imageUrl: p.imageUrl||'', driveFileId: p.driveFileId||'' });
   toast(`✓ "${p.nombre.substring(0,30)}..." agregado a la cotización`, 'success');
 }

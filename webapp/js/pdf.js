@@ -315,8 +315,11 @@ const Pdf = (() => {
         const tx=ML+CW*0.64, tW=CW*0.36;
         doc.setFillColor(...DK);
         doc.roundedRect(tx, NOTES_BOX_Y, tW, 18, 2, 2, 'F');
+        const _allIva  = window._cotItems.every(i  => (i.iva  || 0) > 0);
+        const _noneIva = window._cotItems.every(i  => (i.iva  || 0) === 0);
+        const _totalLbl = _allIva ? 'TOTAL (IVA INCL.)' : _noneIva ? 'TOTAL (SIN IVA)' : 'TOTAL (VER IVA X ÍTEM)';
         doc.setTextColor(...WH); doc.setFont('helvetica','bold'); doc.setFontSize(8);
-        doc.text('TOTAL (IVA INCL.)', tx+tW/2, NOTES_BOX_Y+7, {align:'center'});
+        doc.text(_totalLbl, tx+tW/2, NOTES_BOX_Y+7, {align:'center'});
         doc.setFontSize(14); doc.setTextColor(...OR);
         doc.text('$'+fNum(total), tx+tW/2, NOTES_BOX_Y+14.5, {align:'center'});
       }
@@ -355,6 +358,15 @@ const Pdf = (() => {
         if (item.ref) {
           doc.setFont('helvetica','italic'); doc.setFontSize(6); doc.setTextColor(160,160,160);
           doc.text('REF: '+item.ref, ML+cols[0]+cols[1]+2, y+10.5);
+        }
+        // Etiqueta IVA en la columna de precio (alineada con REF)
+        const ivaX = ML + cols[0] + cols[1] + cols[2] + cols[3] + cols[4] - 2;
+        if ((item.iva || 0) > 0) {
+          doc.setFont('helvetica','bold'); doc.setFontSize(5.5); doc.setTextColor(34,120,60);
+          doc.text(`IVA ${item.iva}% incl.`, ivaX, y+10.5, {align:'right'});
+        } else {
+          doc.setFont('helvetica','normal'); doc.setFontSize(5.5); doc.setTextColor(170,170,170);
+          doc.text('Sin IVA', ivaX, y+10.5, {align:'right'});
         }
         y+=ROW_H;
       });
