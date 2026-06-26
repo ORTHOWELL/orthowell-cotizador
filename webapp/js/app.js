@@ -15,39 +15,31 @@ const App = (() => {
         // Forzar verificación de actualización en cada carga
         swReg.update().catch(() => {});
 
-        const _showUpdateBanner = () => {
-          if (document.getElementById('sw-update-banner')) return;
-          const wrap = document.createElement('div');
-          wrap.id = 'sw-update-banner';
-          wrap.innerHTML =
-            '<div style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);' +
-            'background:#1a1a1a;color:#fff;padding:12px 20px;border-radius:10px;z-index:9999;' +
-            'font-size:13px;display:flex;gap:12px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,.5);white-space:nowrap;">' +
-            '<span>✓ App actualizada</span>' +
-            '<button onclick="location.reload()" style="background:var(--orange);color:#fff;border:none;' +
-            'padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;">Recargar ahora</button>' +
-            '<button onclick="this.closest(\'#sw-update-banner\').remove()" style="background:transparent;color:#aaa;' +
-            'border:none;cursor:pointer;font-size:16px;padding:0 4px;">✕</button>' +
-            '</div>';
-          document.body.appendChild(wrap);
-          // Auto-eliminar después de 60s si el usuario no recarga
-          setTimeout(() => wrap.remove(), 60000);
-        };
-
-        // Método principal: controllerchange se dispara cuando el nuevo SW toma el control
-        // Solo mostrar si había un SW anterior (no en la primera instalación)
+        // Cuando el nuevo SW toma el control, recargar para cargar los JS actualizados.
+        // Si hay una cotización en progreso, mostrar aviso en lugar de recargar.
         const _prevController = navigator.serviceWorker.controller;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (_prevController) _showUpdateBanner();
-        });
-
-        // Método secundario: updatefound como respaldo (cuando el SW tarda más en activarse)
-        swReg.addEventListener('updatefound', () => {
-          const nw = swReg.installing;
-          if (!nw || !navigator.serviceWorker.controller) return;
-          nw.addEventListener('statechange', () => {
-            if (nw.state === 'activated') _showUpdateBanner();
-          });
+          if (!_prevController) return; // primera instalación
+          const tieneItems = window._cotItems && window._cotItems.length > 0;
+          if (!tieneItems) {
+            // Sin cotización en progreso → recargar automáticamente
+            window.location.reload();
+          } else {
+            // Hay items → mostrar aviso que no se puede cerrar fácilmente
+            if (document.getElementById('sw-update-banner')) return;
+            const wrap = document.createElement('div');
+            wrap.id = 'sw-update-banner';
+            wrap.innerHTML =
+              '<div style="position:fixed;top:0;left:0;right:0;z-index:9999;' +
+              'background:#e65100;color:#fff;padding:10px 16px;' +
+              'display:flex;gap:12px;align-items:center;justify-content:center;' +
+              'font-size:13px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.4);">' +
+              '⚠️ Hay una actualización disponible.' +
+              '<button onclick="location.reload()" style="background:#fff;color:#e65100;border:none;' +
+              'padding:5px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;">Recargar ahora</button>' +
+              '</div>';
+            document.body.appendChild(wrap);
+          }
         });
       }
     }

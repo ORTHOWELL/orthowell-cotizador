@@ -3,7 +3,7 @@
  * Estrategia: Cache-first para assets estáticos, Network-first para APIs Google.
  */
 
-const CACHE_NAME    = 'orthowell-v4.6';
+const CACHE_NAME    = 'orthowell-v4.7';
 const CDN_CACHE     = 'orthowell-cdn-v2.6';
 const IMAGES_CACHE  = 'orthowell-images-v2.9';
 
