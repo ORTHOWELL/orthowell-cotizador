@@ -407,7 +407,10 @@ function consultaMostrarDetalle(p, itemEl) {
     Catalog.loadImage(im, p.imageUrl, p.driveFileId, imgWrap);
     imgWrap.appendChild(im);
     imgWrap.onclick = () => {
-      const thumb = p.imageUrl && !p.imageUrl.startsWith('data:,') ? p.imageUrl : (im.src || '');
+      // Si Drive API ya cargó una imagen de mejor calidad en im.src (blob URL o data URL
+      // diferente al thumbnail guardado), usar esa directamente en el lightbox.
+      const liveSrc = (im.complete && im.naturalWidth > 0) ? im.src : '';
+      const thumb = (liveSrc && liveSrc !== p.imageUrl) ? liveSrc : (p.imageUrl || liveSrc || '');
       abrirLightbox(thumb, p.driveFileId || null);
     };
   }

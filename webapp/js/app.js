@@ -487,31 +487,38 @@ const App = (() => {
 function generarPDF()    { Pdf.generarPDF(); }
 
 // ── LIGHTBOX DE IMAGEN ────────────────────────────────────────────
-// thumbSrc: data URL del thumbnail (muestra inmediato)
-// driveFileId: si existe, carga imagen completa desde Drive API
 function abrirLightbox(thumbSrc, driveFileId) {
   if (!thumbSrc && !driveFileId) return;
   const lb  = document.getElementById('img-lightbox');
   const img = document.getElementById('img-lightbox-img');
   const spin = document.getElementById('img-lightbox-spin');
 
-  // Mostrar thumbnail inmediatamente mientras carga la full
+  // Extraer fileId desde URL de Drive si no se pasó explícitamente
+  let fileId = driveFileId;
+  if (!fileId && thumbSrc && thumbSrc.includes('drive.google.com')) {
+    const m = thumbSrc.match(/[?&]id=([^&]+)/);
+    fileId = m ? m[1] : null;
+  }
+
+  // Si el thumb ya es un blob URL (Drive API cargó imagen completa en la tarjeta),
+  // mostrarlo directamente sin opacidad reducida — ya es calidad completa.
+  const isAlreadyFull = thumbSrc && thumbSrc.startsWith('blob:');
+
   img.src = thumbSrc || '';
-  img.style.opacity = driveFileId ? '0.5' : '1';
-  if (spin) spin.style.display = driveFileId ? 'block' : 'none';
+  img.style.opacity = (fileId && !isAlreadyFull) ? '0.5' : '1';
+  if (spin) spin.style.display = (fileId && !isAlreadyFull) ? 'block' : 'none';
 
   lb.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 
-  // Cargar imagen completa desde Drive si hay fileId
-  if (driveFileId && typeof Catalog !== 'undefined') {
-    Catalog.fetchFullImage(driveFileId)
+  // Si ya tenemos calidad completa (blob URL), no necesitamos pedir Drive de nuevo
+  if (fileId && !isAlreadyFull && typeof Catalog !== 'undefined') {
+    Catalog.fetchFullImage(fileId)
       .then(fullSrc => {
-        if (lb.style.display === 'flex') {
-          img.src = fullSrc;
-          img.style.opacity = '1';
-          if (spin) spin.style.display = 'none';
-        }
+        if (lb.style.display !== 'flex') return;
+        img.src = fullSrc;
+        img.style.opacity = '1';
+        if (spin) spin.style.display = 'none';
       })
       .catch(() => {
         img.style.opacity = '1';
