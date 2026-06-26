@@ -285,7 +285,7 @@ const Catalog = (() => {
     });
   }
 
-  // Descarga un archivo de Drive usando la API autenticada (garantizado para nuestros archivos)
+  // Descarga un archivo de Drive usando la API autenticada
   async function _fetchDriveBlob(fileId) {
     if (_driveImgCache.has(fileId)) return _driveImgCache.get(fileId);
     const token = await Auth.ensureToken();
@@ -293,7 +293,14 @@ const Catalog = (() => {
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       { headers: { Authorization: 'Bearer ' + token } }
     );
-    if (!r.ok) throw new Error(`Drive ${r.status}`);
+    if (!r.ok) {
+      if (r.status === 404) {
+        // Archivo eliminado de Drive — limpiar driveFileId del catálogo para no reintentar
+        const p = _catalog.find(x => x.driveFileId === fileId);
+        if (p) { p.driveFileId = ''; _saveCache(); }
+      }
+      throw new Error(`Drive ${r.status}`);
+    }
     const blob = await r.blob();
     const objUrl = URL.createObjectURL(blob);
     _driveImgCache.set(fileId, objUrl);
