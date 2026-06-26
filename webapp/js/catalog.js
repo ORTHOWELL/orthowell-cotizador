@@ -246,12 +246,13 @@ const Catalog = (() => {
   // Caché en memoria: driveFileId → objectURL o base64 (dura la sesión)
   const _driveImgCache = new Map();
 
-  // Genera thumbnail pequeño (~180px, ~10-15KB) para guardar en Sheets
+  // Genera thumbnail para Sheets: 400px/0.65q ≈ 28KB ≈ 37K chars (bajo límite 45K)
+  // A 400px el lightbox se ve bien; Drive tiene la original completa
   function _compressThumb(b64) {
     return new Promise(resolve => {
       const img = new Image();
       img.onload = () => {
-        const MAX = 180;
+        const MAX = 400;
         let w = img.width, h = img.height;
         if (w > MAX || h > MAX) {
           if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
@@ -260,10 +261,27 @@ const Catalog = (() => {
         const c = document.createElement('canvas');
         c.width = w; c.height = h;
         c.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(c.toDataURL('image/jpeg', 0.55));
+        const result = c.toDataURL('image/jpeg', 0.65);
+        // Si excede 45K chars (imagen muy compleja), comprimir más
+        if (result.length > 45000) {
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(c.toDataURL('image/jpeg', 0.40));
+        } else {
+          resolve(result);
+        }
       };
       img.onerror = () => resolve(b64);
       img.src = b64;
+    });
+  }
+
+  // Convierte Blob a base64 para subir a Drive con calidad original
+  function _blobToB64(blob) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(blob);
     });
   }
 
@@ -636,28 +654,28 @@ const Catalog = (() => {
         const imgFile = new File([blob], name, {type: blob.type || 'image/jpeg'});
 
         if (prod) {
-          await new Promise(resolve => compressAndSet(imgFile, async b64 => {
-            try {
-              // Thumbnail pequeño (~180px) que se guarda en Sheets (visible a todos los usuarios)
-              const thumb = await _compressThumb(b64);
-              if (Auth.isAuthenticated()) {
-                try {
-                  const result = await Sync.uploadImageToDrive(prod.ref || `prod_${prod.id}`, b64);
-                  setImage(prod.id, thumb, result.fileId);
-                  _driveImgCache.set(result.fileId, b64);
-                } catch(e) {
-                  setImage(prod.id, thumb, '');
-                }
-              } else {
+          try {
+            // Leer imagen original del ZIP (calidad completa para Drive)
+            const origB64 = await _blobToB64(blob);
+            // Thumbnail 400px para Sheets (visible a todos los usuarios sin Drive)
+            const thumb = await _compressThumb(origB64);
+            if (Auth.isAuthenticated()) {
+              try {
+                // Subir original completo a Drive
+                const result = await Sync.uploadImageToDrive(prod.ref || `prod_${prod.id}`, origB64);
+                setImage(prod.id, thumb, result.fileId);
+                _driveImgCache.set(result.fileId, origB64);
+              } catch(e) {
                 setImage(prod.id, thumb, '');
               }
-              matched++;
-            } catch(e) {
-              matched++;
+            } else {
+              setImage(prod.id, thumb, '');
             }
-            done++;
-            resolve();
-          }));
+            matched++;
+          } catch(e) {
+            matched++;
+          }
+          done++;
         } else {
           notFound++;
           done++;
