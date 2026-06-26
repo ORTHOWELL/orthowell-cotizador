@@ -487,13 +487,37 @@ const App = (() => {
 function generarPDF()    { Pdf.generarPDF(); }
 
 // ── LIGHTBOX DE IMAGEN ────────────────────────────────────────────
-function abrirLightbox(src) {
-  if (!src) return;
+// thumbSrc: data URL del thumbnail (muestra inmediato)
+// driveFileId: si existe, carga imagen completa desde Drive API
+function abrirLightbox(thumbSrc, driveFileId) {
+  if (!thumbSrc && !driveFileId) return;
   const lb  = document.getElementById('img-lightbox');
   const img = document.getElementById('img-lightbox-img');
-  img.src = src;
+  const spin = document.getElementById('img-lightbox-spin');
+
+  // Mostrar thumbnail inmediatamente mientras carga la full
+  img.src = thumbSrc || '';
+  img.style.opacity = driveFileId ? '0.5' : '1';
+  if (spin) spin.style.display = driveFileId ? 'block' : 'none';
+
   lb.style.display = 'flex';
   document.body.style.overflow = 'hidden';
+
+  // Cargar imagen completa desde Drive si hay fileId
+  if (driveFileId && typeof Catalog !== 'undefined') {
+    Catalog.fetchFullImage(driveFileId)
+      .then(fullSrc => {
+        if (lb.style.display === 'flex') {
+          img.src = fullSrc;
+          img.style.opacity = '1';
+          if (spin) spin.style.display = 'none';
+        }
+      })
+      .catch(() => {
+        img.style.opacity = '1';
+        if (spin) spin.style.display = 'none';
+      });
+  }
 }
 function cerrarLightbox() {
   const lb = document.getElementById('img-lightbox');

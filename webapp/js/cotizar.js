@@ -407,8 +407,8 @@ function consultaMostrarDetalle(p, itemEl) {
     Catalog.loadImage(im, p.imageUrl, p.driveFileId, imgWrap);
     imgWrap.appendChild(im);
     imgWrap.onclick = () => {
-      const src = im.src || p.imageUrl;
-      if (src && !src.startsWith('data:,')) abrirLightbox(src);
+      const thumb = p.imageUrl && !p.imageUrl.startsWith('data:,') ? p.imageUrl : (im.src || '');
+      abrirLightbox(thumb, p.driveFileId || null);
     };
   }
 }

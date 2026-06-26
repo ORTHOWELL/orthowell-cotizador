@@ -838,6 +838,7 @@ const Catalog = (() => {
     renderCatalog,
     confirmarImg,
     loadImage: _loadDriveImg,
+    fetchFullImage: _fetchDriveBlob,
     importarSistemaContable,
     importarExcel,
     exportarExcel,
