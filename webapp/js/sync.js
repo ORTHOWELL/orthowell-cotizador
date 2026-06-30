@@ -519,7 +519,7 @@ const Sync = (() => {
     try {
       const token = await Auth.ensureToken();
       const r = await fetch(
-        `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}!A:G`,
+        `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}!A:I`,
         { headers: { Authorization: 'Bearer ' + token } }
       );
       if (!r.ok) return null;
@@ -527,7 +527,11 @@ const Sync = (() => {
       const rows = (data.values || []).slice(1);
       const row = rows.find(r => (r[0]||'').toLowerCase() === email.toLowerCase());
       if (!row) return null;
-      return { email: row[0]||'', nombre: row[1]||'', cargo: row[2]||'', telefono: row[3]||'', emailVendedor: row[4]||'', notas: row[5] ? JSON.parse(row[5]) : null, banco: row[6]||'' };
+      return {
+        email: row[0]||'', nombre: row[1]||'', cargo: row[2]||'', telefono: row[3]||'',
+        emailVendedor: row[4]||'', notas: row[5] ? JSON.parse(row[5]) : null, banco: row[6]||'',
+        hdr: row[7]||null, ftr: row[8]||null,
+      };
     } catch(e) { return null; }
   }
 
@@ -539,12 +543,16 @@ const Sync = (() => {
       body: JSON.stringify({ requests: [{ addSheet: { properties: { title: CONFIG.PROFILES_SHEET } } }] })
     }).catch(() => {});
     // Leer filas actuales
-    const rAll = await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}!A:G`, { headers: { Authorization: 'Bearer ' + token } });
+    const rAll = await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}!A:I`, { headers: { Authorization: 'Bearer ' + token } });
     const allData = rAll.ok ? await rAll.json() : { values: [] };
     const rows = allData.values || [];
-    if (!rows.length) rows.push(['EMAIL','NOMBRE','CARGO','TELEFONO','EMAIL_VENDEDOR','NOTAS','BANCO']);
+    if (!rows.length) rows.push(['EMAIL','NOMBRE','CARGO','TELEFONO','EMAIL_VENDEDOR','NOTAS','BANCO','HDR','FTR']);
     const idx = rows.findIndex((r, i) => i > 0 && (r[0]||'').toLowerCase() === profile.email.toLowerCase());
-    const row = [profile.email, profile.nombre||'', profile.cargo||'', profile.telefono||'', profile.emailVendedor||'', profile.notas ? JSON.stringify(profile.notas) : '', profile.banco||''];
+    const row = [
+      profile.email, profile.nombre||'', profile.cargo||'', profile.telefono||'',
+      profile.emailVendedor||'', profile.notas ? JSON.stringify(profile.notas) : '', profile.banco||'',
+      profile.hdr||'', profile.ftr||'',
+    ];
     if (idx >= 0) rows[idx] = row; else rows.push(row);
     await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.PROFILES_SHEET}:clear`,
       { method: 'POST', headers: { Authorization: 'Bearer ' + token } });

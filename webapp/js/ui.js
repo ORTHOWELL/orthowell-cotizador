@@ -172,12 +172,45 @@ function clearBrandImg(e, zone) {
   else window._brandFtr = null;
   _refreshBrandPreview(zone);
 }
-function guardarBrand() {
+function _compressBrandForSheets(b64) {
+  if (!b64) return Promise.resolve(null);
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const attempts = [[800, 0.75], [600, 0.65], [500, 0.55], [400, 0.45]];
+      for (const [maxW, q] of attempts) {
+        let w = img.width, h = img.height;
+        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        const result = c.toDataURL('image/jpeg', q);
+        if (result.length <= 44000) return resolve(result);
+      }
+      resolve(null); // no cabe en Sheets, omitir
+    };
+    img.onerror = () => resolve(null);
+    img.src = b64;
+  });
+}
+
+async function guardarBrand() {
   Pdf.saveBrand(window._brandHdr, window._brandFtr);
   cerrarBrand();
   const hdrTxt = window._brandHdr ? '✓ encabezado personalizado' : 'diseño ORTHOWELL';
   const ftrTxt = window._brandFtr ? '✓ pie personalizado' : 'pie ORTHOWELL';
   toast('Configuración guardada — ' + hdrTxt + ' · ' + ftrTxt, 'success');
+  // Sincronizar a Sheets para que sea visible en todos los dispositivos
+  try {
+    const [hdrS, ftrS] = await Promise.all([
+      _compressBrandForSheets(window._brandHdr),
+      _compressBrandForSheets(window._brandFtr),
+    ]);
+    await App.updateBrand(hdrS, ftrS);
+    toast('✓ Marca sincronizada en todos los dispositivos', 'success');
+  } catch(e) {
+    console.warn('Brand Sheets sync failed:', e);
+  }
 }
 
 // ── MODAL IMÁGENES MASIVAS ──────────────────────────────────────────

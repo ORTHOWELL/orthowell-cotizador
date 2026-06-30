@@ -26,10 +26,14 @@ const Pdf = (() => {
     return email ? 'ow_brand_' + email : CONFIG.BRAND_KEY;
   }
   function loadBrand() {
+    // Preferir localStorage (calidad máxima, en el dispositivo que subió la imagen)
     try {
       const saved = localStorage.getItem(_brandKey()) || localStorage.getItem(CONFIG.BRAND_KEY);
-      if (saved) { const d = JSON.parse(saved); return {hdr: d.hdr||null, ftr: d.ftr||null}; }
+      if (saved) { const d = JSON.parse(saved); if (d.hdr || d.ftr) return {hdr: d.hdr||null, ftr: d.ftr||null}; }
     } catch(e) {}
+    // Fallback: perfil cargado de Sheets (disponible en todos los dispositivos tras login)
+    const p = (typeof App !== 'undefined') ? App.getProfile() : null;
+    if (p?.hdr || p?.ftr) return { hdr: p.hdr || null, ftr: p.ftr || null };
     return {hdr: null, ftr: null};
   }
   function saveBrand(hdr, ftr) {

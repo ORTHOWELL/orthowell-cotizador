@@ -441,6 +441,9 @@ const App = (() => {
       emailVendedor: document.getElementById('prf-email').value.trim(),
       notas,
       banco: document.getElementById('prf-banco').value.trim(),
+      // Preservar imágenes de marca (se guardan por separado via updateBrand)
+      hdr: _profile?.hdr || null,
+      ftr: _profile?.ftr || null,
     };
     try {
       await Sync.saveProfile(_profile);
@@ -448,6 +451,16 @@ const App = (() => {
       document.getElementById('modal-perfil').classList.remove('open');
     } catch(e) {
       toast('Error al guardar perfil: ' + e.message, 'error');
+    }
+  }
+
+  async function updateBrand(hdr, ftr) {
+    if (!_profile) return;
+    _profile = { ..._profile, hdr: hdr || null, ftr: ftr || null };
+    try {
+      await Sync.saveProfile(_profile);
+    } catch(e) {
+      console.warn('Brand sync to Sheets failed:', e);
     }
   }
 
@@ -468,7 +481,7 @@ const App = (() => {
   return {
     init, afterAuth, onLogout,
     openUsersModal, _changeUser, addUserManual,
-    openProfileModal, saveProfile,
+    openProfileModal, saveProfile, updateBrand,
     forceUpdate,
     getProfile: () => _profile,
     getRol: () => _rol,
