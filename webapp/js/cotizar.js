@@ -157,8 +157,9 @@ function renderItems() {
     const tdNum = document.createElement('td');
     tdNum.style.cssText = 'text-align:center;color:#aaa;'; tdNum.textContent = idx + 1;
 
-    const inpName = document.createElement('input');
-    inpName.type = 'text'; inpName.value = item.nombre; inpName.style.minWidth = '140px';
+    const inpName = document.createElement('textarea');
+    inpName.value = item.nombre; inpName.rows = 2;
+    inpName.style.cssText = 'width:100%;min-width:140px;resize:vertical;min-height:38px;font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-family:inherit;line-height:1.4;';
     inpName.onchange = function() { window._cotItems[idx].nombre = this.value; updateSummary(); };
     const tdName = document.createElement('td'); tdName.appendChild(inpName);
     if (item.ref) {
