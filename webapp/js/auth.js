@@ -38,12 +38,12 @@ const Auth = (() => {
     });
 
     // Intentar restaurar sesión silenciosa
-    const saved = sessionStorage.getItem('ow_user');
+    const saved = localStorage.getItem('ow_user');
     if (saved) {
       try {
         _userInfo = JSON.parse(saved);
-        _token = sessionStorage.getItem('ow_token');
-        _tokenExpiry = parseInt(sessionStorage.getItem('ow_token_exp') || '0');
+        _token = localStorage.getItem('ow_token');
+        _tokenExpiry = parseInt(localStorage.getItem('ow_token_exp') || '0');
         if (_token && Date.now() < _tokenExpiry) {
           _showApp();
           return true;
@@ -67,8 +67,8 @@ const Auth = (() => {
 
     _token = resp.access_token;
     _tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
-    sessionStorage.setItem('ow_token', _token);
-    sessionStorage.setItem('ow_token_exp', _tokenExpiry.toString());
+    localStorage.setItem('ow_token', _token);
+    localStorage.setItem('ow_token_exp', _tokenExpiry.toString());
 
     // Obtener info del usuario
     fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -77,7 +77,7 @@ const Auth = (() => {
     .then(r => r.json())
     .then(info => {
       _userInfo = info;
-      sessionStorage.setItem('ow_user', JSON.stringify(info));
+      localStorage.setItem('ow_user', JSON.stringify(info));
       _showApp();
       // Iniciar la app después de autenticar
       if (typeof App !== 'undefined') App.afterAuth();
@@ -109,9 +109,9 @@ const Auth = (() => {
       google.accounts.oauth2.revoke(_token, () => {});
     }
     _token = null; _userInfo = null; _tokenExpiry = 0;
-    sessionStorage.removeItem('ow_token');
-    sessionStorage.removeItem('ow_token_exp');
-    sessionStorage.removeItem('ow_user');
+    localStorage.removeItem('ow_token');
+    localStorage.removeItem('ow_token_exp');
+    localStorage.removeItem('ow_user');
     _showLogin();
     if (typeof App !== 'undefined') App.onLogout();
   }
@@ -128,8 +128,8 @@ const Auth = (() => {
         if (resp.error) { reject(new Error(resp.error)); return; }
         _token = resp.access_token;
         _tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
-        sessionStorage.setItem('ow_token', _token);
-        sessionStorage.setItem('ow_token_exp', _tokenExpiry.toString());
+        localStorage.setItem('ow_token', _token);
+        localStorage.setItem('ow_token_exp', _tokenExpiry.toString());
         resolve(_token);
       };
       _tokenClient.requestAccessToken({ prompt: '' });

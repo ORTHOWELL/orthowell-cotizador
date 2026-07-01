@@ -22,8 +22,9 @@ function buscarProducto(q) {
     el.classList.add('visible'); return;
   }
 
+  const btnStyle = (active) => `cursor:pointer;font-size:11px;border-radius:5px;padding:3px 9px;font-weight:700;border:1.5px solid ${active?'#f26222':'#ddd'};background:${active?'#fff5ef':'#f8f8f6'};color:${active?'#c0522a':'#555'};transition:background .15s;`;
   el.innerHTML = res.map(p => `
-    <div class="search-item" onclick="addFromCatalog(${p.id})">
+    <div class="search-item" style="cursor:default;">
       <div style="display:flex;align-items:center;gap:10px;">
         <div class="search-item-thumb" style="flex-shrink:0;">
           ${p.imageUrl ? `<img src="${escH(p.imageUrl)}" alt="" loading="lazy">` : '<span style="font-size:18px;">📦</span>'}
@@ -36,29 +37,31 @@ function buscarProducto(q) {
           </div>
         </div>
       </div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:2px;">
-        <span style="font-size:11px;background:#f0f0ec;border-radius:4px;padding:2px 7px;font-weight:700;">P1: ${fCOP(p.precio||0)}</span>
-        <span style="font-size:11px;background:#f0f0ec;border-radius:4px;padding:2px 7px;font-weight:600;">P2: ${fCOP(p.precio2||0)}</span>
-        <span style="font-size:11px;background:#f0f0ec;border-radius:4px;padding:2px 7px;font-weight:600;">P3: ${fCOP(p.precio3||0)}</span>
-        <span style="font-size:11px;background:#fff3e8;border-radius:4px;padding:2px 7px;font-weight:700;color:#c0692a;">💰 ${fCOP(p.costo||0)}</span>
-        <span style="font-size:11px;background:#f0f4ff;border-radius:4px;padding:2px 7px;font-weight:700;color:#3b5bdb;">IVA ${p.iva||0}%</span>
-        <span style="font-size:11px;background:#f0fdf4;border-radius:4px;padding:2px 7px;font-weight:700;color:var(--success);">Saldo: ${p.saldo||0}</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center;">
+        <button style="${btnStyle(true)}" onclick="event.stopPropagation();addFromCatalog(${p.id},'precio')">＋ P1 · ${fCOP(p.precio||0)}</button>
+        ${(p.precio2||0)>0?`<button style="${btnStyle(false)}" onclick="event.stopPropagation();addFromCatalog(${p.id},'precio2')">＋ P2 · ${fCOP(p.precio2)}</button>`:''}
+        ${(p.precio3||0)>0?`<button style="${btnStyle(false)}" onclick="event.stopPropagation();addFromCatalog(${p.id},'precio3')">＋ P3 · ${fCOP(p.precio3)}</button>`:''}
+        <span style="font-size:10px;background:#f0f4ff;border-radius:4px;padding:2px 6px;font-weight:700;color:#3b5bdb;">IVA ${p.iva||0}%</span>
+        <span style="font-size:10px;background:#fff3e8;border-radius:4px;padding:2px 6px;color:#c0692a;">💰 ${fCOP(p.costo||0)}</span>
+        <span style="font-size:10px;background:#f0fdf4;border-radius:4px;padding:2px 6px;color:var(--success);">Saldo: ${p.saldo||0}</span>
       </div>
     </div>`).join('');
   el.classList.add('visible');
 }
 
 // ── AGREGAR DESDE CATÁLOGO ────────────────────────────────────────
-function addFromCatalog(id) {
+function addFromCatalog(id, precioKey) {
   const p = Catalog.getById(id);
   if (!p) return;
+  const precio = (precioKey && p[precioKey]) ? p[precioKey] : p.precio;
+  const precioLabel = precioKey === 'precio2' ? 'P2' : precioKey === 'precio3' ? 'P3' : 'P1';
   const ex = window._cotItems.find(i => i.nombre === p.nombre);
-  if (ex) ex.cant++;
-  else window._cotItems.push({ nombre: p.nombre, ref: p.ref || '', cant: 1, precio: p.precio, iva: p.iva || 0, obs: '', imageUrl: p.imageUrl || '', driveFileId: p.driveFileId || '' });
+  if (ex) { ex.cant++; ex.precio = precio; }
+  else window._cotItems.push({ nombre: p.nombre, ref: p.ref || '', cant: 1, precio, iva: p.iva || 0, obs: '', imageUrl: p.imageUrl || '', driveFileId: p.driveFileId || '' });
   document.getElementById('search-input').value = '';
   document.getElementById('search-results').classList.remove('visible');
   renderItems();
-  toast('✓ Agregado: ' + p.nombre.substring(0, 30), 'success');
+  toast(`✓ Agregado (${precioLabel}): ` + p.nombre.substring(0, 30), 'success');
 }
 
 // ── AGREGAR MANUAL ────────────────────────────────────────────────
@@ -79,7 +82,7 @@ function agregarManual(guardarEnCatalogo) {
 
   const ex = window._cotItems.find(i => i.nombre === nombre);
   if (ex) ex.cant += cant;
-  else window._cotItems.push({ nombre, ref, cant, precio, iva: 0, obs, imageUrl: '' });
+  else window._cotItems.push({ nombre, ref, cant, precio, iva, obs, imageUrl: '' });
 
   if (guardarEnCatalogo) {
     const catalog = Catalog.getAll();
@@ -198,8 +201,10 @@ function renderItems() {
     tdTotal.style.cssText = 'font-weight:700;color:var(--orange);';
     tdTotal.textContent = fCOP(item.cant * item.precio);
 
-    const inpObs = document.createElement('input');
-    inpObs.type = 'text'; inpObs.value = item.obs || ''; inpObs.placeholder = 'Observación...';
+    const inpObs = document.createElement('textarea');
+    inpObs.value = item.obs || ''; inpObs.placeholder = 'Observación...';
+    inpObs.rows = 2;
+    inpObs.style.cssText = 'width:100%;resize:vertical;min-height:38px;font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-family:inherit;line-height:1.4;';
     inpObs.onchange = function() { window._cotItems[idx].obs = this.value; };
     const tdObs = document.createElement('td'); tdObs.appendChild(inpObs);
 

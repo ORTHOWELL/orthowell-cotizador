@@ -330,13 +330,21 @@ const Pdf = (() => {
 
       hdr();
 
+      const LH = 3.4; // mm por línea de texto (7.5pt)
       window._cotItems.forEach((item, idx) => {
-        if (y+ROW_H > PAGE_BOTTOM) { notesTotal(); ftr(); doc.addPage(); pageNum++; y=0; hdr(); }
-        if (idx%2===0) { doc.setFillColor(250,250,248); doc.rect(ML,y,CW,ROW_H,'F'); }
-        doc.setDrawColor(...BD); doc.line(ML,y+ROW_H,ML+CW,y+ROW_H);
+        // Pre-calcular altura dinámica según líneas de texto
+        doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+        const descLines = doc.splitTextToSize(item.nombre || '', cols[2] - 4);
+        const obsLines  = item.obs ? doc.splitTextToSize(item.obs, cols[6] - 4) : [];
+        const refRows   = item.ref ? 1 : 0;
+        const textRows  = Math.max(descLines.length + refRows, obsLines.length, 2);
+        const rowH      = Math.max(ROW_H, 5 + textRows * LH + 3);
 
-        const iS=ROW_H-2;
-        // Imagen: preferir base64 pre-cargada, luego imageUrl si ya es base64, luego nada
+        if (y+rowH > PAGE_BOTTOM) { notesTotal(); ftr(); doc.addPage(); pageNum++; y=0; hdr(); }
+        if (idx%2===0) { doc.setFillColor(250,250,248); doc.rect(ML,y,CW,rowH,'F'); }
+        doc.setDrawColor(...BD); doc.line(ML,y+rowH,ML+CW,y+rowH);
+
+        const iS = Math.min(rowH-2, 12);
         const imgData = item._pdfImg || (item.imageUrl?.startsWith('data:image') ? item.imageUrl : null);
         if (imgData) {
           try {
@@ -349,30 +357,48 @@ const Pdf = (() => {
           doc.setFillColor(235,235,232); doc.roundedRect(ML+1,y+1,iS,iS,1,1,'F');
         }
 
+        const midY = y + rowH/2 + 1;
         doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...DK);
-        let cx=ML+cols[0];
-        [{v:String(idx+1),a:'center'},{v:item.nombre,a:'left'},{v:String(item.cant),a:'center'},
-         {v:fNum(item.precio),a:'right'},{v:fNum(item.cant*item.precio),a:'right'},{v:item.obs||'',a:'left'}]
-          .forEach((cell,ci) => {
-            const tw=cols[ci+1];
-            if(ci===1){doc.text(doc.splitTextToSize(cell.v,tw-3).slice(0,2),cx+2,y+5);}
-            else{doc.text(cell.v,cx+(cell.a==='center'?tw/2:cell.a==='right'?tw-2:2),y+ROW_H/2+1,{align:cell.a});}
-            cx+=tw;
-          });
+
+        // # — centrado verticalmente
+        doc.text(String(idx+1), ML+cols[0]+cols[1]/2, midY, {align:'center'});
+
+        // Descripción — líneas completas desde arriba
+        doc.text(descLines, ML+cols[0]+cols[1]+2, y+5);
+
+        // REF debajo de la descripción
         if (item.ref) {
           doc.setFont('helvetica','italic'); doc.setFontSize(6); doc.setTextColor(160,160,160);
-          doc.text('REF: '+item.ref, ML+cols[0]+cols[1]+2, y+10.5);
+          doc.text('REF: '+item.ref, ML+cols[0]+cols[1]+2, y+5+descLines.length*LH);
+          doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...DK);
         }
-        // Etiqueta IVA en la columna de precio (alineada con REF)
-        const ivaX = ML + cols[0] + cols[1] + cols[2] + cols[3] + cols[4] - 2;
+
+        // Cantidad — centrado verticalmente
+        doc.text(String(item.cant), ML+cols[0]+cols[1]+cols[2]+cols[3]/2, midY, {align:'center'});
+
+        // Precio — alineado derecha, centrado verticalmente
+        doc.text(fNum(item.precio), ML+cols[0]+cols[1]+cols[2]+cols[3]+cols[4]-2, midY, {align:'right'});
+
+        // Total — alineado derecha, centrado verticalmente
+        doc.text(fNum(item.cant*item.precio), ML+cols[0]+cols[1]+cols[2]+cols[3]+cols[4]+cols[5]-2, midY, {align:'right'});
+
+        // Observaciones — líneas completas desde arriba
+        if (obsLines.length) {
+          doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...DK);
+          doc.text(obsLines, ML+cols[0]+cols[1]+cols[2]+cols[3]+cols[4]+cols[5]+2, y+5);
+        }
+
+        // Etiqueta IVA (debajo del precio)
+        const ivaX = ML + cols[0]+cols[1]+cols[2]+cols[3]+cols[4]-2;
+        const ivaY = midY + 3.5;
         if ((item.iva || 0) > 0) {
           doc.setFont('helvetica','bold'); doc.setFontSize(5.5); doc.setTextColor(34,120,60);
-          doc.text(`IVA ${item.iva}% incl.`, ivaX, y+10.5, {align:'right'});
+          doc.text(`IVA ${item.iva}% incl.`, ivaX, ivaY, {align:'right'});
         } else {
           doc.setFont('helvetica','normal'); doc.setFontSize(5.5); doc.setTextColor(170,170,170);
-          doc.text('Sin IVA', ivaX, y+10.5, {align:'right'});
+          doc.text('Sin IVA', ivaX, ivaY, {align:'right'});
         }
-        y+=ROW_H;
+        y += rowH;
       });
 
       notesTotal(); ftr();
