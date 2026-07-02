@@ -538,8 +538,92 @@ function cerrarLightbox() {
   document.body.style.overflow = '';
 }
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') cerrarLightbox();
+  if (e.key === 'Escape') { cerrarLightbox(); cerrarEscaner(); }
 });
+
+// ── ESCÁNER DE CÓDIGO DE BARRAS ───────────────────────────────────
+let _barcodeScanner = null;
+let _barcodeTarget  = null;
+
+async function abrirEscaner(target) {
+  _barcodeTarget = target;
+  const modal  = document.getElementById('modal-scanner');
+  const status = document.getElementById('scanner-status');
+  modal.style.display = 'flex';
+  status.textContent = 'Cargando escáner...';
+
+  if (!window.Html5Qrcode) {
+    try {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    } catch(e) {
+      cerrarEscaner();
+      toast('No se pudo cargar el escáner. Verifica tu conexión.', 'error');
+      return;
+    }
+  }
+
+  status.textContent = 'Apunta al código de barras del producto';
+  document.getElementById('scanner-reader').innerHTML = '';
+
+  try {
+    _barcodeScanner = new Html5Qrcode('scanner-reader', {
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+      ],
+      verbose: false,
+    });
+
+    const qrboxFn = (vw, vh) => {
+      const w = Math.min(Math.round(vw * 0.85), 320);
+      return { width: w, height: Math.round(w * 0.28) };
+    };
+
+    await _barcodeScanner.start(
+      { facingMode: 'environment' },
+      { fps: 15, qrbox: qrboxFn },
+      (decodedText) => {
+        cerrarEscaner();
+        if (_barcodeTarget === 'consulta') {
+          const inp = document.getElementById('consulta-input');
+          if (inp) { inp.value = decodedText; consultaBuscar(decodedText); }
+        } else {
+          const inp = document.getElementById('search-input');
+          if (inp) { inp.value = decodedText; buscarProducto(decodedText); }
+        }
+        toast('✓ REF leída: ' + decodedText, 'success');
+      },
+      () => {}
+    );
+  } catch(e) {
+    cerrarEscaner();
+    const msg = (e?.message || String(e)).toLowerCase();
+    if (msg.includes('permission') || msg.includes('denied') || msg.includes('notallowed')) {
+      toast('Permiso de cámara denegado. Habilítalo en la configuración del navegador.', 'error');
+    } else {
+      toast('No se pudo acceder a la cámara: ' + (e?.message || e), 'error');
+    }
+  }
+}
+
+async function cerrarEscaner() {
+  if (_barcodeScanner) {
+    try { await _barcodeScanner.stop(); } catch(e) {}
+    try { _barcodeScanner.clear(); }    catch(e) {}
+    _barcodeScanner = null;
+  }
+  const modal = document.getElementById('modal-scanner');
+  if (modal) modal.style.display = 'none';
+  const reader = document.getElementById('scanner-reader');
+  if (reader) reader.innerHTML = '';
+}
 
 // Iniciar app cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', () => App.init());

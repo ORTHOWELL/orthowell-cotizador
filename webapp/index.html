@@ -119,9 +119,12 @@
     <div class="card search-card">
       <div class="card-header"><div class="dot"></div>Agregar Productos</div>
       <div class="card-body">
-        <div class="search-box">
+        <div class="search-box" style="position:relative;">
           <span class="search-icon">🔍</span>
-          <input type="text" id="search-input" placeholder="Buscar por nombre, referencia o marca..." oninput="buscarProducto(this.value)" autocomplete="off"/>
+          <input type="text" id="search-input" placeholder="Buscar por nombre, referencia o marca..." oninput="buscarProducto(this.value)" autocomplete="off" style="padding-right:52px;"/>
+          <button onclick="abrirEscaner('cotizacion')" title="Escanear código de barras" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:6px;border-radius:8px;color:#888;display:flex;align-items:center;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"><rect x="2" y="3" width="2.5" height="18"/><rect x="6.5" y="3" width="1.2" height="18"/><rect x="9.5" y="3" width="3" height="18"/><rect x="14.5" y="3" width="1.2" height="18"/><rect x="17.5" y="3" width="2.5" height="18"/></svg>
+          </button>
           <div class="search-results" id="search-results"></div>
         </div>
 
@@ -209,12 +212,15 @@
 <div id="panel-consulta" class="panel">
 <div class="container" style="max-width:1000px;">
   <div style="position:relative;margin-bottom:8px;">
-    <div class="search-box" style="margin-bottom:0;">
+    <div class="search-box" style="margin-bottom:0;position:relative;">
       <span class="search-icon" style="font-size:18px;">🔎</span>
       <input type="text" id="consulta-input"
-        style="width:100%;padding:14px 16px 14px 44px;font-size:16px;border-radius:12px;border:2px solid var(--border);"
+        style="width:100%;padding:14px 52px 14px 44px;font-size:16px;border-radius:12px;border:2px solid var(--border);"
         placeholder="Buscar producto por nombre, referencia o marca..."
         oninput="consultaBuscar(this.value)" autocomplete="off"/>
+      <button onclick="abrirEscaner('consulta')" title="Escanear código de barras" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:6px;border-radius:8px;color:#888;display:flex;align-items:center;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"><rect x="2" y="3" width="2.5" height="18"/><rect x="6.5" y="3" width="1.2" height="18"/><rect x="9.5" y="3" width="3" height="18"/><rect x="14.5" y="3" width="1.2" height="18"/><rect x="17.5" y="3" width="2.5" height="18"/></svg>
+      </button>
     </div>
     <div id="consulta-count" style="font-size:12px;color:var(--muted);margin-top:6px;padding-left:4px;"></div>
   </div>
@@ -622,6 +628,19 @@
 <script src="./js/cotizar.js"></script>
 <script src="./js/pdf.js"></script>
 <script src="./js/app.js"></script>
+
+<!-- ══ MODAL: ESCÁNER DE CÓDIGO DE BARRAS ══════════════════════════ -->
+<div id="modal-scanner" style="display:none;position:fixed;inset:0;z-index:9997;background:rgba(0,0,0,0.97);flex-direction:column;align-items:center;justify-content:flex-start;padding:20px 16px;">
+  <div style="width:100%;max-width:480px;display:flex;flex-direction:column;align-items:center;">
+    <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:14px;">
+      <span style="color:#fff;font-size:17px;font-weight:700;letter-spacing:.2px;">Escanear código de barras</span>
+      <button onclick="cerrarEscaner()" style="background:rgba(255,255,255,0.12);border:none;color:#fff;font-size:18px;width:34px;height:34px;border-radius:50%;cursor:pointer;">✕</button>
+    </div>
+    <div id="scanner-reader" style="width:100%;border-radius:14px;overflow:hidden;background:#111;min-height:200px;"></div>
+    <p id="scanner-status" style="color:rgba(255,255,255,0.65);font-size:13px;margin-top:12px;text-align:center;line-height:1.5;min-height:36px;">Iniciando cámara...</p>
+    <button onclick="cerrarEscaner()" style="margin-top:8px;padding:13px 0;background:#f26222;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;width:100%;max-width:300px;">Cancelar</button>
+  </div>
+</div>
 
 <!-- ══ LIGHTBOX IMAGEN ════════════════════════════════════════════ -->
 <div id="img-lightbox" onclick="cerrarLightbox()" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.88);align-items:center;justify-content:center;cursor:zoom-out;">

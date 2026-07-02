@@ -3,7 +3,7 @@
  * Estrategia: Cache-first para assets estáticos, Network-first para APIs Google.
  */
 
-const CACHE_NAME    = 'orthowell-v4.9';
+const CACHE_NAME    = 'orthowell-v5.0';
 const CDN_CACHE     = 'orthowell-cdn-v2.6';
 const IMAGES_CACHE  = 'orthowell-images-v2.9';
 
@@ -82,10 +82,11 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // CDN assets (jsPDF, SheetJS, fonts): Cache first
+  // CDN assets (jsPDF, SheetJS, fonts, html5-qrcode): Cache first
   if (url.hostname.includes('cdnjs.cloudflare.com') ||
       url.hostname.includes('fonts.googleapis.com') ||
-      url.hostname.includes('fonts.gstatic.com')) {
+      url.hostname.includes('fonts.gstatic.com') ||
+      url.hostname === 'unpkg.com') {
     event.respondWith(cacheFirstWithFallback(event.request, CDN_CACHE));
     return;
   }
