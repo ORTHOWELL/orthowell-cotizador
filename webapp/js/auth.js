@@ -17,7 +17,7 @@ const Auth = (() => {
         const check = setInterval(() => {
           if (window.google?.accounts) { clearInterval(check); resolve(); }
         }, 100);
-        setTimeout(() => { clearInterval(check); resolve(); }, 5000);
+        setTimeout(() => { clearInterval(check); resolve(); }, 10000);
       });
     }
 
@@ -97,8 +97,17 @@ const Auth = (() => {
   // ── LOGIN / LOGOUT ───────────────────────────────────────────────
   function login() {
     if (!_tokenClient) {
-      _showError('Google no ha cargado aún. Recarga la página.');
-      return;
+      // GIS puede haber cargado después del timeout de init() — intentar inicializar ahora
+      if (window.google?.accounts && !CONFIG.GOOGLE_CLIENT_ID.startsWith('TODO')) {
+        _tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: CONFIG.GOOGLE_CLIENT_ID,
+          scope: CONFIG.GOOGLE_SCOPES,
+          callback: _handleTokenResponse,
+        });
+      } else {
+        _showError('Google no ha cargado aún. Recarga la página.');
+        return;
+      }
     }
     document.getElementById('auth-error').textContent = '';
     _tokenClient.requestAccessToken({ prompt: 'select_account' });
