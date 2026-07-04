@@ -489,14 +489,14 @@ const App = (() => {
   async function forceUpdate() {
     toast('Limpiando caché y actualizando...', 'success');
     try {
-      // Borrar todos los cachés del SW
       const keys = await caches.keys();
       await Promise.all(keys.map(k => caches.delete(k)));
-      // Desregistrar el SW para que la próxima carga lo reinstale limpio
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map(r => r.unregister()));
     } catch(e) { console.warn('forceUpdate:', e); }
-    location.reload(true);
+    // Navegar a la misma URL con timestamp para bypassear caché HTTP del browser
+    const base = location.origin + location.pathname;
+    window.location.replace(base + '?_=' + Date.now());
   }
 
   return {

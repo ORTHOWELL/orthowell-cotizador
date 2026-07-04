@@ -3,7 +3,7 @@
  * Estrategia: Cache-first para assets estáticos, Network-first para APIs Google.
  */
 
-const CACHE_NAME    = 'orthowell-v5.2';
+const CACHE_NAME    = 'orthowell-v5.3';
 const CDN_CACHE     = 'orthowell-cdn-v2.6';
 const IMAGES_CACHE  = 'orthowell-images-v2.9';
 
@@ -38,15 +38,18 @@ const CDN_ASSETS = [
 self.addEventListener('install', event => {
   event.waitUntil(
     Promise.all([
-      caches.open(CACHE_NAME).then(cache => {
-        return cache.addAll(STATIC_ASSETS).catch(err => {
-          console.warn('SW: some static assets failed to cache', err);
-        });
-      }),
+      // Forzar descarga fresca de cada asset (ignora CDN cache de GitHub Pages)
+      caches.open(CACHE_NAME).then(cache =>
+        Promise.all(
+          STATIC_ASSETS.map(url =>
+            fetch(new Request(url, { cache: 'no-cache' }))
+              .then(r => { if (r.ok) cache.put(url, r); })
+              .catch(() => {})
+          )
+        )
+      ),
       caches.open(CDN_CACHE).then(cache => {
-        return cache.addAll(CDN_ASSETS).catch(err => {
-          console.warn('SW: CDN assets not cached (offline at install time)', err);
-        });
+        return cache.addAll(CDN_ASSETS).catch(() => {});
       }),
     ]).then(() => self.skipWaiting())
   );
