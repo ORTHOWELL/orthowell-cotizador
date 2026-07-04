@@ -333,11 +333,12 @@
 
       <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 10px;">Datos del cliente</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div class="form-group" style="margin:0;"><label>Nombre / Contacto *</label><input type="text" id="np-cliente-nombre" placeholder="Nombre del cliente"/></div>
-        <div class="form-group" style="margin:0;"><label>Empresa / Entidad</label><input type="text" id="np-cliente-empresa" placeholder="Razón social"/></div>
+        <div class="form-group" style="margin:0;"><label>Cliente / Entidad *</label><input type="text" id="np-cliente-nombre" placeholder="Nombre del cliente o entidad"/></div>
+        <div class="form-group" style="margin:0;"><label>NIT / Identificación</label><input type="text" id="np-cliente-nit" placeholder="900.123.456-7"/></div>
+        <div class="form-group" style="margin:0;"><label>Empresa / Razón social</label><input type="text" id="np-cliente-empresa" placeholder="Razón social"/></div>
         <div class="form-group" style="margin:0;"><label>Teléfono</label><input type="tel" id="np-cliente-tel" placeholder="+57 310 …"/></div>
         <div class="form-group" style="margin:0;"><label>Email</label><input type="email" id="np-cliente-email" placeholder="correo@ejemplo.com"/></div>
-        <div class="form-group" style="margin:0;grid-column:1/-1;"><label>Dirección de entrega</label><input type="text" id="np-cliente-dir" placeholder="Ciudad, dirección"/></div>
+        <div class="form-group" style="margin:0;"><label>Dirección de entrega</label><input type="text" id="np-cliente-dir" placeholder="Ciudad, dirección"/></div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
@@ -369,14 +370,19 @@
         </button>
       </div>
 
-      <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px;">Fotos de la orden <span style="font-size:10px;font-weight:400;">(opcional, máx. 3)</span></div>
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-        <label style="display:inline-flex;align-items:center;gap:8px;padding:8px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;">
-          📷 Subir foto
+      <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px;">Archivos adjuntos <span style="font-size:10px;font-weight:400;">(opcional · fotos, PDF · máx. 3)</span></div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <label style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;">
+          📷 Tomar foto
           <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="npAgregarFoto(event)">
         </label>
-        <span id="np-foto-count" style="font-size:12px;color:var(--muted);">0/3 fotos</span>
+        <label style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;">
+          📂 Subir foto / PDF
+          <input type="file" accept="image/*,application/pdf,.pdf" style="display:none;" onchange="npAgregarFoto(event)">
+        </label>
+        <span id="np-foto-count" style="font-size:12px;color:var(--muted);">0/3</span>
       </div>
+      <div id="np-archivos-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
 
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
         <button onclick="cerrarNuevoPedido()" class="btn btn-outline">Cancelar</button>

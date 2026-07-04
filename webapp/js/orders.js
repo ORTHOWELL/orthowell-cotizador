@@ -80,6 +80,7 @@ const Orders = (() => {
       fechaCreacion:   new Date().toISOString(),
       creadoPor:       usuario,
       clienteNombre:    data.clienteNombre    || '',
+      clienteNit:       data.clienteNit       || '',
       clienteEmpresa:   data.clienteEmpresa   || '',
       clienteTel:       data.clienteTel       || '',
       clienteEmail:     data.clienteEmail     || '',
@@ -320,7 +321,11 @@ function renderOrderDetail(id) {
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:14px;">
       <div style="background:#fff;border-radius:12px;padding:14px;border:1px solid var(--border);">
         <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">📋 Cliente</div>
-        ${_dRow('Nombre', order.clienteNombre)}
+        ${_dRow('Cliente', order.clienteNombre)}
+        ${order.clienteNit ? `<div style="display:flex;gap:8px;padding:3px 0;">
+          <span style="font-size:12px;color:var(--muted);min-width:70px;flex-shrink:0;">NIT</span>
+          <span style="font-size:13px;font-family:'DM Mono',monospace;">${escH(order.clienteNit)}</span>
+        </div>` : ''}
         ${_dRow('Empresa', order.clienteEmpresa)}
         ${order.clienteTel ? `<div style="display:flex;gap:8px;padding:3px 0;">
           <span style="font-size:12px;color:var(--muted);min-width:70px;flex-shrink:0;">Tel</span>
@@ -357,23 +362,23 @@ function renderOrderDetail(id) {
     <div style="background:#fff;border-radius:12px;padding:14px;border:1px solid var(--border);margin-bottom:14px;">
       <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">📎 Archivos adjuntos</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        ${(order.archivos || []).map(a => `
-          <div onclick="abrirLightbox('${escH(a.thumb)}',null)"
-            style="width:80px;height:80px;border-radius:8px;overflow:hidden;cursor:zoom-in;border:1px solid var(--border);flex-shrink:0;">
-            <img src="${escH(a.thumb)}" style="width:100%;height:100%;object-fit:cover;" alt="${escH(a.nombre || '')}">
-          </div>`).join('')}
+        ${(order.archivos || []).map(a => _renderArchivoThumb(a)).join('')}
       </div>
     </div>` : ''}
 
     ${isOwn ? `
     <div style="background:#fff;border-radius:12px;padding:14px;border:1px solid var(--border);margin-bottom:14px;">
-      <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">📷 Adjuntar foto</div>
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-        <label style="display:inline-flex;align-items:center;gap:8px;padding:8px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;">
-          📷 Subir foto
+      <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">📎 Adjuntar archivo</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <label style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;">
+          📷 Tomar foto
           <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="pedidoAgregarFoto(event)">
         </label>
-        <span style="font-size:11px;color:var(--muted);">Máx. 3 fotos · ${(order.archivos || []).length}/3 adjuntadas</span>
+        <label style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;">
+          📂 Subir foto / PDF
+          <input type="file" accept="image/*,application/pdf,.pdf" style="display:none;" onchange="pedidoAgregarFoto(event)">
+        </label>
+        <span style="font-size:11px;color:var(--muted);">${(order.archivos || []).length}/3 adjuntos</span>
       </div>
     </div>
     <div style="background:#fff;border-radius:12px;padding:14px;border:1px solid var(--border);margin-bottom:14px;">
@@ -399,6 +404,20 @@ function _dRow(label, val) {
   return `<div style="display:flex;gap:8px;padding:3px 0;">
     <span style="font-size:12px;color:var(--muted);min-width:70px;flex-shrink:0;">${escH(label)}</span>
     <span style="font-size:13px;word-break:break-word;">${escH(val)}</span>
+  </div>`;
+}
+
+function _renderArchivoThumb(a) {
+  if (a.tipo === 'pdf' || !a.thumb) {
+    return `<div style="width:80px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;border:1px solid var(--border);border-radius:8px;background:#fff8f0;flex-shrink:0;">
+      <div style="font-size:30px;line-height:1;">📄</div>
+      <div style="font-size:9px;color:var(--muted);text-align:center;word-break:break-all;line-height:1.3;max-width:72px;">${escH((a.nombre||'').replace(/\.[^.]+$/,'').substring(0,20))}</div>
+      <div style="font-size:8px;font-weight:700;color:#dc2626;">PDF</div>
+    </div>`;
+  }
+  return `<div onclick="abrirLightbox('${escH(a.thumb)}',null)"
+    style="width:80px;height:80px;border-radius:8px;overflow:hidden;cursor:zoom-in;border:1px solid var(--border);flex-shrink:0;">
+    <img src="${escH(a.thumb)}" style="width:100%;height:100%;object-fit:cover;" alt="${escH(a.nombre||'')}">
   </div>`;
 }
 
@@ -478,20 +497,33 @@ async function pedidoAgregarFoto(e) {
   if (!file) return;
   const order = Orders.getById(_currentOrderId);
   if (!order) return;
-  if ((order.archivos || []).length >= 3) { toast('Máximo 3 fotos por orden', 'error'); return; }
-  const reader = new FileReader();
-  reader.onload = async ev => {
-    const thumb = await Orders.compressPhoto(ev.target.result);
-    if (!thumb) { toast('No se pudo comprimir la imagen', 'error'); return; }
-    if (!order.archivos) order.archivos = [];
-    order.archivos.push({ id: Date.now().toString(), nombre: file.name, thumb, fecha: new Date().toISOString() });
-    Orders.addEvent(_currentOrderId, 'FOTO', 'Foto adjuntada: ' + file.name, Auth.getUser()?.email || '');
+  if ((order.archivos || []).length >= 3) { toast('Máximo 3 archivos por orden', 'error'); return; }
+  if (!order.archivos) order.archivos = [];
+
+  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  const usuario = Auth.getUser()?.email || '';
+
+  if (isPdf) {
+    order.archivos.push({ id: Date.now().toString(), nombre: file.name, tipo: 'pdf', thumb: null, fecha: new Date().toISOString() });
+    Orders.addEvent(_currentOrderId, 'FOTO', 'PDF adjuntado: ' + file.name, usuario);
     Orders.update(_currentOrderId, { archivos: order.archivos });
-    Sync.saveOrder(Orders.getById(_currentOrderId)).catch(e => console.warn('saveOrder:', e));
+    Sync.saveOrder(Orders.getById(_currentOrderId)).catch(err => console.warn('saveOrder:', err));
     renderOrderDetail(_currentOrderId);
-    toast('✓ Foto adjuntada', 'success');
-  };
-  reader.readAsDataURL(file);
+    toast('✓ PDF registrado: ' + file.name, 'success');
+  } else {
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      const thumb = await Orders.compressPhoto(ev.target.result);
+      if (!thumb) { toast('No se pudo comprimir la imagen', 'error'); return; }
+      order.archivos.push({ id: Date.now().toString(), nombre: file.name, tipo: 'imagen', thumb, fecha: new Date().toISOString() });
+      Orders.addEvent(_currentOrderId, 'FOTO', 'Foto adjuntada: ' + file.name, usuario);
+      Orders.update(_currentOrderId, { archivos: order.archivos });
+      Sync.saveOrder(Orders.getById(_currentOrderId)).catch(err => console.warn('saveOrder:', err));
+      renderOrderDetail(_currentOrderId);
+      toast('✓ Foto adjuntada', 'success');
+    };
+    reader.readAsDataURL(file);
+  }
   e.target.value = '';
 }
 
@@ -576,11 +608,12 @@ function confirmarEntrega() {
 function abrirNuevoPedido() {
   _newOrderItems   = [];
   _newOrderArchivos = [];
-  ['np-cliente-nombre','np-cliente-empresa','np-cliente-tel','np-cliente-email',
+  ['np-cliente-nombre','np-cliente-nit','np-cliente-empresa','np-cliente-tel','np-cliente-email',
    'np-cliente-dir','np-fecha-entrega','np-notas','np-item-desc','np-item-ref','np-item-proveedor']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const cantEl = document.getElementById('np-item-cant'); if (cantEl) cantEl.value = '1';
-  const ctrEl  = document.getElementById('np-foto-count'); if (ctrEl) ctrEl.textContent = '0/3 fotos';
+  const ctrEl  = document.getElementById('np-foto-count'); if (ctrEl) ctrEl.textContent = '0/3';
+  const prevEl = document.getElementById('np-archivos-preview'); if (prevEl) prevEl.innerHTML = '';
   _renderNpItems();
   document.getElementById('modal-nuevo-pedido').classList.add('open');
   setTimeout(() => document.getElementById('np-cliente-nombre')?.focus(), 150);
@@ -628,28 +661,55 @@ function npAgregarItem() {
 async function npAgregarFoto(e) {
   const file = e.target.files?.[0];
   if (!file) return;
-  if (_newOrderArchivos.length >= 3) { toast('Máximo 3 fotos', 'error'); return; }
-  const reader = new FileReader();
-  reader.onload = async ev => {
-    const thumb = await Orders.compressPhoto(ev.target.result);
-    if (!thumb) { toast('Error al comprimir la imagen', 'error'); return; }
-    _newOrderArchivos.push({ id: Date.now().toString(), nombre: file.name, thumb, fecha: new Date().toISOString() });
-    const ctr = document.getElementById('np-foto-count');
-    if (ctr) ctr.textContent = _newOrderArchivos.length + '/3 foto(s)';
-    toast('✓ Foto agregada', 'success');
-  };
-  reader.readAsDataURL(file);
+  if (_newOrderArchivos.length >= 3) { toast('Máximo 3 archivos', 'error'); return; }
+
+  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+  if (isPdf) {
+    _newOrderArchivos.push({ id: Date.now().toString(), nombre: file.name, tipo: 'pdf', thumb: null, fecha: new Date().toISOString() });
+    _npActualizarArchivos();
+    toast('✓ PDF registrado: ' + file.name, 'success');
+  } else {
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      const thumb = await Orders.compressPhoto(ev.target.result);
+      if (!thumb) { toast('Error al comprimir la imagen', 'error'); return; }
+      _newOrderArchivos.push({ id: Date.now().toString(), nombre: file.name, tipo: 'imagen', thumb, fecha: new Date().toISOString() });
+      _npActualizarArchivos();
+      toast('✓ Foto agregada', 'success');
+    };
+    reader.readAsDataURL(file);
+  }
   e.target.value = '';
+}
+
+function _npActualizarArchivos() {
+  const ctr = document.getElementById('np-foto-count');
+  if (ctr) ctr.textContent = _newOrderArchivos.length + '/3';
+  const prev = document.getElementById('np-archivos-preview');
+  if (!prev) return;
+  prev.innerHTML = _newOrderArchivos.map((a, i) => {
+    if (a.tipo === 'pdf' || !a.thumb) {
+      return `<div style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:#fff8f0;border:1px solid var(--border);border-radius:7px;font-size:12px;">
+        <span>📄</span><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escH(a.nombre)}</span>
+        <button onclick="_newOrderArchivos.splice(${i},1);_npActualizarArchivos();" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;padding:0 2px;line-height:1;flex-shrink:0;">✕</button>
+      </div>`;
+    }
+    return `<div style="position:relative;width:56px;height:56px;border-radius:7px;overflow:hidden;border:1px solid var(--border);">
+      <img src="${escH(a.thumb)}" style="width:100%;height:100%;object-fit:cover;">
+      <button onclick="_newOrderArchivos.splice(${i},1);_npActualizarArchivos();" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);border:none;color:#fff;cursor:pointer;font-size:11px;width:18px;height:18px;border-radius:50%;padding:0;line-height:1;">✕</button>
+    </div>`;
+  }).join('');
 }
 
 async function guardarNuevoPedido() {
   const nombre = (document.getElementById('np-cliente-nombre')?.value || '').trim();
-  if (!nombre) { toast('Ingresa el nombre del cliente', 'error'); document.getElementById('np-cliente-nombre')?.focus(); return; }
-  if (!_newOrderItems.length) { toast('Agrega al menos un ítem al pedido', 'error'); return; }
+  if (!nombre) { toast('Ingresa el nombre del cliente o entidad', 'error'); document.getElementById('np-cliente-nombre')?.focus(); return; }
 
   const usuario = Auth.getUser()?.email || '';
   const order = Orders.add({
     clienteNombre:    nombre,
+    clienteNit:       (document.getElementById('np-cliente-nit')?.value      || '').trim(),
     clienteEmpresa:   (document.getElementById('np-cliente-empresa')?.value  || '').trim(),
     clienteTel:       (document.getElementById('np-cliente-tel')?.value      || '').trim(),
     clienteEmail:     (document.getElementById('np-cliente-email')?.value    || '').trim(),
