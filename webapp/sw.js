@@ -1,15 +1,17 @@
 /**
  * sw.js — Service Worker para PWA offline
- * Estrategia: Cache-first para assets estáticos, Network-first para APIs Google.
+ * Estrategia:
+ *   - index.html → Network-first (siempre fresco, con fallback a caché si offline)
+ *   - JS / CSS / imágenes propias → Cache-first (rápido, actualizados al instalar nuevo SW)
+ *   - CDN (jsPDF, fonts) → Cache-first
+ *   - Google APIs → Network-only (requieren auth token)
  */
 
-const CACHE_NAME    = 'orthowell-v5.3';
-const CDN_CACHE     = 'orthowell-cdn-v2.6';
-const IMAGES_CACHE  = 'orthowell-images-v2.9';
+const CACHE_NAME   = 'orthowell-v5.4';
+const CDN_CACHE    = 'orthowell-cdn-v2.6';
+const IMAGES_CACHE = 'orthowell-images-v2.9';
 
-// Assets del app shell que se cachean en la instalación
 const STATIC_ASSETS = [
-  './',
   './index.html',
   './css/styles.css',
   './js/config.js',
@@ -27,18 +29,16 @@ const STATIC_ASSETS = [
   './icons/icon-512.png',
 ];
 
-// CDN assets (jsPDF, SheetJS, Google Fonts)
 const CDN_ASSETS = [
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
   'https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&family=Barlow+Condensed:wght@600;700;800&display=swap',
 ];
 
-// ── INSTALL: cachear app shell ────────────────────────────────────
+// ── INSTALL: cachear con no-cache para obtener versión fresca ─────
 self.addEventListener('install', event => {
   event.waitUntil(
     Promise.all([
-      // Forzar descarga fresca de cada asset (ignora CDN cache de GitHub Pages)
       caches.open(CACHE_NAME).then(cache =>
         Promise.all(
           STATIC_ASSETS.map(url =>
@@ -48,81 +48,101 @@ self.addEventListener('install', event => {
           )
         )
       ),
-      caches.open(CDN_CACHE).then(cache => {
-        return cache.addAll(CDN_ASSETS).catch(() => {});
-      }),
+      caches.open(CDN_CACHE).then(cache =>
+        cache.addAll(CDN_ASSETS).catch(() => {})
+      ),
     ]).then(() => self.skipWaiting())
   );
 });
 
-// ── ACTIVATE: limpiar caches viejos ──────────────────────────────
+// ── ACTIVATE: limpiar caches viejos + notificar a clientes ────────
 self.addEventListener('activate', event => {
-  const currentCaches = [CACHE_NAME, CDN_CACHE, IMAGES_CACHE];
+  const keep = [CACHE_NAME, CDN_CACHE, IMAGES_CACHE];
   event.waitUntil(
-    caches.keys().then(cacheNames =>
-      Promise.all(
-        cacheNames
-          .filter(name => !currentCaches.includes(name))
-          .map(name => caches.delete(name))
-      )
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then(names => Promise.all(
+        names.filter(n => !keep.includes(n)).map(n => caches.delete(n))
+      ))
+      .then(() => self.clients.claim())
   );
 });
 
-// ── FETCH: estrategia por tipo de request ────────────────────────
+// ── FETCH: estrategia por tipo de request ─────────────────────────
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // Google APIs: Network only (necesitan auth token)
+  // Google APIs: Network-only
   if (url.hostname.includes('googleapis.com') ||
       url.hostname.includes('accounts.google.com') ||
       url.hostname.includes('oauth2.googleapis.com')) {
-    return; // No interceptar — dejar pasar directamente
-  }
-
-  // Drive thumbnails y lh3: dejar pasar sin cachear
-  // (las imágenes se cargan via Drive API autenticada, no por URL pública)
-  if (url.hostname === 'drive.google.com' || url.hostname === 'lh3.googleusercontent.com') {
     return;
   }
 
-  // CDN assets (jsPDF, SheetJS, fonts, html5-qrcode): Cache first
+  // Drive / imágenes autenticadas: pasar sin cachear
+  if (url.hostname === 'drive.google.com' ||
+      url.hostname === 'lh3.googleusercontent.com') {
+    return;
+  }
+
+  // CDN (jsPDF, fonts, html5-qrcode): Cache-first
   if (url.hostname.includes('cdnjs.cloudflare.com') ||
       url.hostname.includes('fonts.googleapis.com') ||
       url.hostname.includes('fonts.gstatic.com') ||
       url.hostname === 'unpkg.com') {
-    event.respondWith(cacheFirstWithFallback(event.request, CDN_CACHE));
+    event.respondWith(cacheFirst(event.request, CDN_CACHE));
     return;
   }
 
-  // Wikipedia / Wikimedia (búsqueda de imágenes): Network first, no cache
+  // Wikipedia / Wikimedia / Unsplash: pasar sin cachear
   if (url.hostname.includes('wikipedia.org') ||
       url.hostname.includes('wikimedia.org') ||
       url.hostname.includes('unsplash.com')) {
-    return; // Dejar pasar directamente
+    return;
   }
 
-  // App shell (HTML, CSS, JS propios): Cache first con fallback a red
   if (url.origin === self.location.origin) {
-    event.respondWith(cacheFirstWithFallback(event.request, CACHE_NAME));
-    return;
+    const path = url.pathname;
+    const isHtml = path.endsWith('/') ||
+                   path.endsWith('/index.html') ||
+                   path === '/orthowell-cotizador/' ||
+                   event.request.mode === 'navigate';
+
+    if (isHtml) {
+      // index.html: Network-first → siempre la versión más reciente
+      event.respondWith(networkFirstHtml(event.request));
+    } else {
+      // JS, CSS, imágenes: Cache-first (rápido, renovado en cada instalación de SW)
+      event.respondWith(cacheFirst(event.request, CACHE_NAME));
+    }
   }
 });
 
-// ── ESTRATEGIA: Cache-first con fallback a red ────────────────────
-async function cacheFirstWithFallback(request, cacheName) {
+// ── Network-first para HTML (fallback a caché si offline) ─────────
+async function networkFirstHtml(request) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const res = await fetch(request, { cache: 'no-cache' });
+    if (res.ok) cache.put('./index.html', res.clone()).catch(() => {});
+    return res;
+  } catch(err) {
+    const cached = await cache.match('./index.html');
+    if (cached) return cached;
+    throw err;
+  }
+}
+
+// ── Cache-first con fallback a red ────────────────────────────────
+async function cacheFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
   if (cached) return cached;
-
   try {
-    const networkResponse = await fetch(request);
-    if (networkResponse.ok && request.method === 'GET') {
-      cache.put(request, networkResponse.clone()).catch(() => {});
+    const res = await fetch(request);
+    if (res.ok && request.method === 'GET') {
+      cache.put(request, res.clone()).catch(() => {});
     }
-    return networkResponse;
+    return res;
   } catch(err) {
-    // Si es HTML principal y estamos offline, devolver index del cache
     if (request.mode === 'navigate') {
       const fallback = await cache.match('./index.html');
       if (fallback) return fallback;
@@ -131,11 +151,9 @@ async function cacheFirstWithFallback(request, cacheName) {
   }
 }
 
-// ── MENSAJE: forzar actualización ────────────────────────────────
+// ── Mensajes desde la app ─────────────────────────────────────────
 self.addEventListener('message', event => {
-  if (event.data?.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
   if (event.data?.type === 'CLEAR_IMAGE_CACHE') {
     caches.delete(IMAGES_CACHE).then(() => {
       event.ports[0]?.postMessage({ cleared: true });
