@@ -160,6 +160,21 @@ const App = (() => {
       setSyncStatus('error', 'Usando caché');
     }
 
+    // Cargar pedidos (solo para admin y vendedor)
+    if (_rol !== 'aliado' && typeof Orders !== 'undefined') {
+      try {
+        const remoteOrders = await Sync.loadOrders();
+        if (remoteOrders && remoteOrders.length > 0) {
+          Orders.setFromRemote(remoteOrders);
+        } else {
+          Orders.init();
+        }
+      } catch(e) {
+        console.warn('Could not load orders from Sheets, using local cache:', e);
+        Orders.init();
+      }
+    }
+
     // Renderizar UI
     renderCatalog();
     updateSummary();
@@ -376,9 +391,10 @@ const App = (() => {
   function _applyRoleRestrictions(rol) {
     const isAliado = rol === 'aliado';
     const tabs = document.querySelectorAll('.tab');
-    // Tabs: 0=cotizar, 1=consulta, 2=catalogo
+    // Tabs: 0=cotizar, 1=consulta, 2=catalogo, 3=pedidos
     if (tabs[0]) tabs[0].style.display = isAliado ? 'none' : '';
     if (tabs[2]) tabs[2].style.display = isAliado ? 'none' : '';
+    if (tabs[3]) tabs[3].style.display = isAliado ? 'none' : ''; // aliado no ve Pedidos
     // Ocultar botón de sincronización manual para aliados (solo lectura)
     const btnSync = document.getElementById('btn-sync');
     if (btnSync) btnSync.style.display = isAliado ? 'none' : '';
@@ -392,10 +408,15 @@ const App = (() => {
   function _updateRoleBadge(rol) {
     const badge = document.getElementById('user-role-badge');
     if (!badge) return;
-    const isAdmin = rol === 'admin';
-    badge.textContent = isAdmin ? 'ADMIN' : 'VENDEDOR';
-    badge.style.background = isAdmin ? '#fff3e0' : '#e8f5e9';
-    badge.style.color      = isAdmin ? '#e65100' : '#2e7d32';
+    const cfg = {
+      admin:    { label: 'ADMIN',    bg: '#fff3e0', color: '#e65100' },
+      vendedor: { label: 'VENDEDOR', bg: '#e8f5e9', color: '#2e7d32' },
+      aliado:   { label: 'ALIADO',   bg: '#e8eaf6', color: '#283593' },
+    };
+    const c = cfg[rol] || cfg.vendedor;
+    badge.textContent      = c.label;
+    badge.style.background = c.bg;
+    badge.style.color      = c.color;
     badge.style.display    = 'inline';
   }
 

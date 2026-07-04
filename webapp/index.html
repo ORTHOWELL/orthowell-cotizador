@@ -85,6 +85,7 @@
   <div class="tab active" onclick="switchTab('cotizar')">📋 Nueva Cotización</div>
   <div class="tab" onclick="switchTab('consulta')">🔎 Consulta</div>
   <div class="tab" onclick="switchTab('catalogo')">📦 Catálogo</div>
+  <div class="tab" onclick="switchTab('pedidos')">🛒 Pedidos</div>
 </div>
 
 <!-- ══ PANEL: COTIZAR ══════════════════════════════════════════════ -->
@@ -278,6 +279,128 @@
     </div>
   </div>
 </div>
+</div>
+
+<!-- ══ PANEL: PEDIDOS ══════════════════════════════════════════════ -->
+<div id="panel-pedidos" class="panel">
+<div class="container" style="max-width:1000px;padding-top:8px;">
+
+  <!-- VISTA LISTA -->
+  <div id="pedidos-list-view">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;flex:1;min-width:0;">
+        <select id="pedidos-filter-estado" onchange="renderOrdersList()"
+          style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;cursor:pointer;">
+          <option value="">Todos los estados</option>
+          <option value="PENDIENTE">Pendiente</option>
+          <option value="EN_PROCESO">En proceso</option>
+          <option value="ENTREGA_PARCIAL">Entrega parcial</option>
+          <option value="ENTREGADO">Entregado</option>
+          <option value="CANCELADO">Cancelado</option>
+        </select>
+        <input type="text" id="pedidos-search" placeholder="Buscar cliente, empresa, número…"
+          oninput="renderOrdersList()"
+          style="flex:1;min-width:160px;padding:8px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;">
+      </div>
+      <button id="btn-nueva-orden" onclick="abrirNuevoPedido()"
+        style="padding:9px 18px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;">
+        + Nueva Orden
+      </button>
+    </div>
+    <div id="pedidos-cards"></div>
+  </div>
+
+  <!-- VISTA DETALLE (oculta hasta abrir una orden) -->
+  <div id="pedidos-detail-view" style="display:none;">
+    <button onclick="backToOrdersList()"
+      style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#fff;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;margin-bottom:16px;">
+      ← Volver a órdenes
+    </button>
+    <div id="pedidos-detail-content"></div>
+  </div>
+
+</div>
+</div>
+
+<!-- ══ MODAL: NUEVA ORDEN ══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-nuevo-pedido" onclick="if(event.target===this)cerrarNuevoPedido()">
+  <div class="modal-box" style="max-width:680px;width:96vw;max-height:92vh;overflow-y:auto;">
+    <div class="modal-header">
+      <span>🛒 Nueva Orden de Compra</span>
+      <button class="modal-close" onclick="cerrarNuevoPedido()">✕</button>
+    </div>
+    <div style="padding:0 20px 20px;">
+
+      <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 10px;">Datos del cliente</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group" style="margin:0;"><label>Nombre / Contacto *</label><input type="text" id="np-cliente-nombre" placeholder="Nombre del cliente"/></div>
+        <div class="form-group" style="margin:0;"><label>Empresa / Entidad</label><input type="text" id="np-cliente-empresa" placeholder="Razón social"/></div>
+        <div class="form-group" style="margin:0;"><label>Teléfono</label><input type="tel" id="np-cliente-tel" placeholder="+57 310 …"/></div>
+        <div class="form-group" style="margin:0;"><label>Email</label><input type="email" id="np-cliente-email" placeholder="correo@ejemplo.com"/></div>
+        <div class="form-group" style="margin:0;grid-column:1/-1;"><label>Dirección de entrega</label><input type="text" id="np-cliente-dir" placeholder="Ciudad, dirección"/></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
+        <div class="form-group" style="margin:0;"><label>Fecha estimada de entrega</label><input type="date" id="np-fecha-entrega"/></div>
+        <div class="form-group" style="margin:0;"><label>Notas generales</label><input type="text" id="np-notas" placeholder="Condiciones, observaciones…"/></div>
+      </div>
+
+      <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px;">Ítems solicitados *</div>
+      <div id="np-items-list" style="margin-bottom:10px;max-height:160px;overflow-y:auto;padding-right:4px;"></div>
+      <div style="background:var(--surface);border-radius:10px;padding:12px;border:1px dashed var(--border);">
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-bottom:8px;">
+          <input type="text" id="np-item-desc" placeholder="Descripción del ítem *"
+            style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('np-item-cant').focus();}">
+          <input type="text" id="np-item-ref" placeholder="Referencia"
+            style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:'DM Mono',monospace;">
+        </div>
+        <div style="display:grid;grid-template-columns:100px 1fr;gap:8px;margin-bottom:8px;">
+          <input type="number" id="np-item-cant" value="1" min="1" placeholder="Cant."
+            style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;text-align:center;"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();npAgregarItem();}">
+          <input type="text" id="np-item-proveedor" placeholder="Proveedor (opcional)"
+            style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();npAgregarItem();}">
+        </div>
+        <button onclick="npAgregarItem()"
+          style="padding:7px 16px;background:var(--dark);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">
+          + Agregar ítem
+        </button>
+      </div>
+
+      <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px;">Fotos de la orden <span style="font-size:10px;font-weight:400;">(opcional, máx. 3)</span></div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <label style="display:inline-flex;align-items:center;gap:8px;padding:8px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;">
+          📷 Subir foto
+          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="npAgregarFoto(event)">
+        </label>
+        <span id="np-foto-count" style="font-size:12px;color:var(--muted);">0/3 fotos</span>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+        <button onclick="cerrarNuevoPedido()" class="btn btn-outline">Cancelar</button>
+        <button onclick="guardarNuevoPedido()" class="btn btn-primary">Crear orden</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: REGISTRAR ENTREGA ════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-entrega" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal-box" style="max-width:560px;width:96vw;max-height:88vh;overflow-y:auto;">
+    <div class="modal-header">
+      <span>📦 Registrar entrega</span>
+      <button class="modal-close" onclick="document.getElementById('modal-entrega').classList.remove('open')">✕</button>
+    </div>
+    <div style="padding:0 20px 20px;">
+      <div id="modal-entrega-body"></div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;">
+        <button onclick="document.getElementById('modal-entrega').classList.remove('open')" class="btn btn-outline">Cancelar</button>
+        <button onclick="confirmarEntrega()" class="btn btn-primary">Confirmar entrega</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ══ MODAL: IMAGEN ══════════════════════════════════════════════ -->
@@ -627,6 +750,7 @@
 <script src="./js/catalog.js"></script>
 <script src="./js/cotizar.js"></script>
 <script src="./js/pdf.js"></script>
+<script src="./js/orders.js"></script>
 <script src="./js/app.js"></script>
 
 <!-- ══ MODAL: ESCÁNER DE CÓDIGO DE BARRAS ══════════════════════════ -->

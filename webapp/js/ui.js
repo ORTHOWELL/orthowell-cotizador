@@ -22,12 +22,15 @@ function toast(msg, type = 'success') {
 
 // ── TABS ────────────────────────────────────────────────────────────
 function switchTab(t) {
-  ['cotizar','consulta','catalogo'].forEach((n, i) => {
-    document.querySelectorAll('.tab')[i].classList.toggle('active', n === t);
-    document.getElementById('panel-' + n).classList.toggle('active', n === t);
+  ['cotizar','consulta','catalogo','pedidos'].forEach((n, i) => {
+    const tab = document.querySelectorAll('.tab')[i];
+    if (tab) tab.classList.toggle('active', n === t);
+    const panel = document.getElementById('panel-' + n);
+    if (panel) panel.classList.toggle('active', n === t);
   });
   if (t === 'catalogo') renderCatalog();
   if (t === 'consulta') document.getElementById('consulta-input').focus();
+  if (t === 'pedidos' && typeof renderOrdersList === 'function') renderOrdersList();
 }
 
 // ── MODAL PRODUCTO ──────────────────────────────────────────────────
