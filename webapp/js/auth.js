@@ -8,6 +8,7 @@ const Auth = (() => {
   let _tokenExpiry = 0;
   let _userInfo = null;
   let _tokenClient = null;
+  let _silentRefresh = false;
 
   // ── INIT ──────────────────────────────────────────────────────────
   async function init() {
@@ -37,7 +38,7 @@ const Auth = (() => {
       callback: _handleTokenResponse,
     });
 
-    // Intentar restaurar sesión silenciosa
+    // Intentar restaurar sesión
     const saved = localStorage.getItem('ow_user');
     if (saved) {
       try {
@@ -45,22 +46,34 @@ const Auth = (() => {
         _token = localStorage.getItem('ow_token');
         _tokenExpiry = parseInt(localStorage.getItem('ow_token_exp') || '0');
         if (_token && Date.now() < _tokenExpiry) {
+          // Token aún válido → entrar directo
           _showApp();
           return true;
+        }
+        if (_userInfo) {
+          // Token expirado pero hay sesión guardada → renovar silenciosamente.
+          // Si Google sigue con sesión activa en el dispositivo, entra sin popup.
+          // Si falla (sesión de Google cerrada), _handleTokenResponse muestra login.
+          _silentRefresh = true;
+          _updateHeaderUser(); // mostrar nombre/avatar mientras carga
+          _tokenClient.requestAccessToken({ prompt: '' });
+          return false;
         }
       } catch(e) {}
     }
 
-    // Sin sesión válida → mostrar pantalla de login
+    // Sin sesión guardada → mostrar pantalla de login
     _showLogin();
     return false;
   }
 
   // ── HANDLE TOKEN RESPONSE ────────────────────────────────────────
   function _handleTokenResponse(resp) {
+    const wasSilent = _silentRefresh;
+    _silentRefresh = false;
     if (resp.error) {
-      console.error('OAuth error:', resp.error);
-      _showError('Error de autenticación: ' + resp.error);
+      console.warn('OAuth error:', resp.error);
+      if (!wasSilent) _showError('Error de autenticación: ' + resp.error);
       _showLogin();
       return;
     }

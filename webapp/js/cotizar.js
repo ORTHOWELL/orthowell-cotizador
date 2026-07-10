@@ -126,11 +126,10 @@ function renderItems() {
     '<thead><tr>' +
     '<th style="width:48px;">IMG</th>' +
     '<th style="width:26px;">#</th>' +
-    '<th>Descripción</th>' +
-    '<th style="width:58px;">Cant.</th>' +
-    '<th style="width:100px;">Vr. Unit.</th>' +
-    '<th style="width:100px;">Vr. Total</th>' +
-    '<th style="width:110px;">Observaciones</th>' +
+    '<th>Descripción / Observaciones</th>' +
+    '<th style="width:80px;">Cant.</th>' +
+    '<th style="width:130px;">Vr. Unit.</th>' +
+    '<th style="width:110px;">Vr. Total</th>' +
     '<th style="width:30px;"></th>' +
     '</tr></thead>';
 
@@ -152,43 +151,62 @@ function renderItems() {
     } else {
       thumbDiv.textContent = '📷';
     }
-    const tdThumb = document.createElement('td'); tdThumb.appendChild(thumbDiv);
+    const tdThumb = document.createElement('td');
+    tdThumb.setAttribute('data-label', 'Imagen');
+    tdThumb.appendChild(thumbDiv);
 
     const tdNum = document.createElement('td');
-    tdNum.style.cssText = 'text-align:center;color:#aaa;'; tdNum.textContent = idx + 1;
+    tdNum.setAttribute('data-label', '#');
+    tdNum.style.cssText = 'text-align:center;color:#aaa;';
+    tdNum.textContent = idx + 1;
 
+    // Descripción + ref + observaciones en una sola celda
     const inpName = document.createElement('textarea');
     inpName.value = item.nombre; inpName.rows = 2;
-    inpName.style.cssText = 'width:100%;min-width:140px;resize:vertical;min-height:38px;font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-family:inherit;line-height:1.4;';
+    inpName.style.cssText = 'width:100%;min-width:140px;resize:vertical;min-height:40px;font-size:12.5px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-family:inherit;line-height:1.4;';
     inpName.onchange = function() { window._cotItems[idx].nombre = this.value; updateSummary(); };
-    const tdName = document.createElement('td'); tdName.appendChild(inpName);
+    const tdName = document.createElement('td');
+    tdName.setAttribute('data-label', 'Descripción');
+    tdName.appendChild(inpName);
     if (item.ref) {
       const refLabel = document.createElement('div');
-      refLabel.style.cssText = 'font-size:10px;color:#aaa;font-family:monospace;margin-top:2px;';
+      refLabel.style.cssText = 'font-size:10px;color:#aaa;font-family:monospace;margin-top:3px;';
       refLabel.textContent = item.ref;
       tdName.appendChild(refLabel);
     }
+    const inpObs = document.createElement('textarea');
+    inpObs.value = item.obs || '';
+    inpObs.placeholder = 'Observación (opcional)...';
+    inpObs.rows = 1;
+    inpObs.style.cssText = 'width:100%;resize:vertical;min-height:30px;font-size:11.5px;padding:4px 7px;border:1px solid var(--border-light);border-radius:6px;font-family:inherit;line-height:1.4;margin-top:5px;color:var(--text2);background:var(--surface);';
+    inpObs.onchange = function() { window._cotItems[idx].obs = this.value; };
+    tdName.appendChild(inpObs);
 
     const inpCant = document.createElement('input');
     inpCant.type = 'number'; inpCant.value = item.cant; inpCant.min = 1;
+    inpCant.style.cssText = 'font-size:14px;font-weight:600;text-align:center;';
     inpCant.onchange = function() {
       window._cotItems[idx].cant = parseFloat(this.value) || 0;
       tdTotal.textContent = fCOP(window._cotItems[idx].cant * window._cotItems[idx].precio);
       updateSummary();
     };
-    const tdCant = document.createElement('td'); tdCant.appendChild(inpCant);
+    const tdCant = document.createElement('td');
+    tdCant.setAttribute('data-label', 'Cantidad');
+    tdCant.appendChild(inpCant);
 
     const inpPrecio = document.createElement('input');
     inpPrecio.type = 'number'; inpPrecio.value = item.precio; inpPrecio.min = 0;
+    inpPrecio.style.cssText = 'font-size:13px;';
     inpPrecio.onchange = function() {
       window._cotItems[idx].precio = parseFloat(this.value) || 0;
       tdTotal.textContent = fCOP(window._cotItems[idx].cant * window._cotItems[idx].precio);
       updateSummary();
     };
     const tdPrecio = document.createElement('td');
+    tdPrecio.setAttribute('data-label', 'Vr. Unit.');
     tdPrecio.appendChild(inpPrecio);
     const ivaBadge = document.createElement('div');
-    ivaBadge.style.cssText = 'font-size:9px;font-weight:700;margin-top:2px;text-align:center;letter-spacing:.3px;';
+    ivaBadge.style.cssText = 'font-size:9px;font-weight:700;margin-top:3px;text-align:center;letter-spacing:.3px;';
     if ((item.iva || 0) > 0) {
       ivaBadge.style.color = '#2d8a4e';
       ivaBadge.textContent = `IVA ${item.iva}% incl.`;
@@ -199,22 +217,18 @@ function renderItems() {
     tdPrecio.appendChild(ivaBadge);
 
     const tdTotal = document.createElement('td');
-    tdTotal.style.cssText = 'font-weight:700;color:var(--orange);';
+    tdTotal.setAttribute('data-label', 'Vr. Total');
+    tdTotal.style.cssText = 'font-weight:700;color:var(--orange);font-size:13px;';
     tdTotal.textContent = fCOP(item.cant * item.precio);
-
-    const inpObs = document.createElement('textarea');
-    inpObs.value = item.obs || ''; inpObs.placeholder = 'Observación...';
-    inpObs.rows = 2;
-    inpObs.style.cssText = 'width:100%;resize:vertical;min-height:38px;font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-family:inherit;line-height:1.4;';
-    inpObs.onchange = function() { window._cotItems[idx].obs = this.value; };
-    const tdObs = document.createElement('td'); tdObs.appendChild(inpObs);
 
     const btnDel = document.createElement('button');
     btnDel.className = 'btn-del'; btnDel.textContent = '✕';
     btnDel.onclick = () => { window._cotItems.splice(idx, 1); renderItems(); };
-    const tdDel = document.createElement('td'); tdDel.appendChild(btnDel);
+    const tdDel = document.createElement('td');
+    tdDel.setAttribute('data-label', '');
+    tdDel.appendChild(btnDel);
 
-    tr.append(tdThumb, tdNum, tdName, tdCant, tdPrecio, tdTotal, tdObs, tdDel);
+    tr.append(tdThumb, tdNum, tdName, tdCant, tdPrecio, tdTotal, tdDel);
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
