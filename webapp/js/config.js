@@ -24,6 +24,7 @@ const CONFIG = {
   USERS_SHEET:   'Usuarios',
   PROFILES_SHEET:'Perfiles',
   ORDERS_SHEET:  'Pedidos',
+  COTS_SHEET:    'Cotizaciones',
 
   // ─── GOOGLE DRIVE ───────────────────────────────────────────
   // Nombre de la carpeta que se creará automáticamente en tu Drive

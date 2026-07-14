@@ -627,6 +627,68 @@ const Sync = (() => {
     );
   }
 
+  // ── COTIZACIONES ─────────────────────────────────────────────────
+  async function loadCotizaciones() {
+    if (CONFIG.SPREADSHEET_ID.startsWith('TODO')) return [];
+    try {
+      const token = await Auth.ensureToken();
+      const r = await fetch(
+        `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.COTS_SHEET}!A:B`,
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      if (!r.ok) return [];
+      const data = await r.json();
+      return (data.values || []).slice(1)
+        .filter(row => row[0] && row[1])
+        .map(row => { try { return JSON.parse(row[1]); } catch(e) { return null; } })
+        .filter(Boolean);
+    } catch(e) { return []; }
+  }
+
+  async function saveCotizacion(cot) {
+    const token = await Auth.ensureToken();
+    await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}:batchUpdate`, {
+      method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: CONFIG.COTS_SHEET } } }] })
+    }).catch(() => {});
+    const rAll = await fetch(
+      `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.COTS_SHEET}!A:B`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    const allData = rAll.ok ? await rAll.json() : { values: [] };
+    const rows = allData.values || [];
+    if (!rows.length) rows.push(['ID', 'DATOS']);
+    const idx = rows.findIndex((r, i) => i > 0 && r[0] === cot.id);
+    const newRow = [cot.id, JSON.stringify(cot)];
+    if (idx >= 0) rows[idx] = newRow; else rows.push(newRow);
+    await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.COTS_SHEET}:clear`,
+      { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    await fetch(
+      `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.COTS_SHEET}!A1?valueInputOption=RAW`,
+      { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: rows }) }
+    );
+  }
+
+  async function deleteCotizacion(id) {
+    const token = await Auth.ensureToken();
+    const rAll = await fetch(
+      `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.COTS_SHEET}!A:B`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (!rAll.ok) return;
+    const data = await rAll.json();
+    const rows = (data.values || []).filter((r, i) => i === 0 || r[0] !== id);
+    if (!rows.length) rows.push(['ID', 'DATOS']);
+    await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.COTS_SHEET}:clear`,
+      { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    await fetch(
+      `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.COTS_SHEET}!A1?valueInputOption=RAW`,
+      { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: rows }) }
+    );
+  }
+
   return {
     initSheet,
     loadFromSheets,
@@ -647,5 +709,8 @@ const Sync = (() => {
     loadOrders,
     saveOrder,
     deleteOrder,
+    loadCotizaciones,
+    saveCotizacion,
+    deleteCotizacion,
   };
 })();

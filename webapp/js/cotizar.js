@@ -291,6 +291,175 @@ function limpiarFormulario() {
   toast('Formulario limpiado', 'success');
 }
 
+// ── HISTORIAL DE COTIZACIONES ─────────────────────────────────────
+const _COT_CACHE_KEY = 'ow_cots_v1';
+let _cotsRemoteLoaded = false;
+
+function _getCotCache() {
+  try { return JSON.parse(localStorage.getItem(_COT_CACHE_KEY) || '[]'); } catch(e) { return []; }
+}
+function _saveCotCache(cots) {
+  localStorage.setItem(_COT_CACHE_KEY, JSON.stringify(cots.slice(-300)));
+}
+
+function guardarCotizacion() {
+  const cliente = document.getElementById('cliente')?.value.trim();
+  if (!cliente && !window._cotItems.length) {
+    toast('Agrega al menos un cliente o producto antes de guardar', 'error'); return;
+  }
+  const user   = (typeof Auth !== 'undefined') ? Auth.getUser() : null;
+  const numero = document.getElementById('num_cot')?.value.trim() || '—';
+
+  // Guardar ítems sin imágenes base64 (solo URLs de catálogo)
+  const items = window._cotItems.map(i => ({
+    nombre: i.nombre, ref: i.ref || '', cant: i.cant, precio: i.precio,
+    iva: i.iva || 0, obs: i.obs || '',
+    imageUrl:    (i.imageUrl    && !i.imageUrl.startsWith('data:'))    ? i.imageUrl    : '',
+    driveFileId: i.driveFileId || '',
+  }));
+
+  const cot = {
+    id:               'COT-' + Date.now(),
+    numero,
+    fecha:            document.getElementById('fecha')?.value        || '',
+    fechaCreacion:    new Date().toISOString(),
+    creadoPor:        user?.email || '',
+    creadoPorNombre:  user?.name  || user?.email || '',
+    cliente:          document.getElementById('cliente')?.value.trim()     || '',
+    contacto:         document.getElementById('contacto')?.value.trim()    || '',
+    ciudad:           document.getElementById('ciudad')?.value.trim()      || '',
+    condiciones:      document.getElementById('condiciones')?.value        || '',
+    validez:          document.getElementById('validez')?.value            || '',
+    notasExtra:       document.getElementById('notas-extra')?.value.trim() || '',
+    items,
+    total: items.reduce((s, i) => s + i.cant * i.precio, 0),
+  };
+
+  // Cache local inmediato (sin bloquear)
+  const cots = _getCotCache();
+  cots.push(cot);
+  _saveCotCache(cots);
+
+  // Sync a Sheets en segundo plano
+  if (typeof Sync !== 'undefined') {
+    Sync.saveCotizacion(cot).catch(e => console.warn('Sync cot failed:', e));
+  }
+  toast(`✅ Cotización ${numero} guardada`, 'success');
+}
+
+function abrirHistorial() {
+  const modal = document.getElementById('modal-historial-cots');
+  if (!modal) return;
+  modal.classList.add('open');
+  _renderHistorialCots();
+
+  // Cargar de Sheets la primera vez que se abre
+  if (!_cotsRemoteLoaded && typeof Sync !== 'undefined') {
+    _cotsRemoteLoaded = true;
+    Sync.loadCotizaciones().then(remote => {
+      if (!remote?.length) return;
+      // Fusionar: remote tiene prioridad, mantener locales que no estén en remote
+      const remoteIds = new Set(remote.map(c => c.id));
+      const localOnly = _getCotCache().filter(c => !remoteIds.has(c.id));
+      _saveCotCache([...localOnly, ...remote]);
+      _renderHistorialCots();
+    }).catch(() => {});
+  }
+}
+
+function cerrarHistorial() {
+  document.getElementById('modal-historial-cots')?.classList.remove('open');
+}
+
+function _renderHistorialCots() {
+  const listEl = document.getElementById('hist-cots-list');
+  if (!listEl) return;
+
+  const rol       = (typeof App !== 'undefined') ? App.getRol() : 'vendedor';
+  const userEmail = (typeof Auth !== 'undefined') ? (Auth.getUser()?.email || '') : '';
+
+  const q = (document.getElementById('hist-cots-search')?.value || '').toLowerCase().trim();
+
+  let cots = _getCotCache().slice().reverse(); // más recientes primero
+  if (rol !== 'admin') cots = cots.filter(c => c.creadoPor === userEmail);
+  if (q) cots = cots.filter(c =>
+    (c.numero  || '').toLowerCase().includes(q) ||
+    (c.cliente || '').toLowerCase().includes(q) ||
+    (c.creadoPorNombre || '').toLowerCase().includes(q)
+  );
+
+  if (!cots.length) {
+    listEl.innerHTML =
+      '<div style="text-align:center;padding:48px 20px;color:var(--muted);">' +
+      '<div style="font-size:40px;margin-bottom:12px;">📄</div>' +
+      '<div style="font-weight:700;font-size:15px;color:var(--text2);">Sin cotizaciones guardadas</div>' +
+      '<div style="font-size:13px;margin-top:6px;">Usa el botón "💾 Guardar" al crear una cotización</div>' +
+      '</div>';
+    return;
+  }
+
+  const fmt = iso => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  };
+
+  listEl.innerHTML = cots.map(c => `
+    <div class="hist-cot-card">
+      <div class="hist-cot-top">
+        <span class="hist-cot-num">${escH(c.numero || '—')}</span>
+        <span class="hist-cot-date">${fmt(c.fechaCreacion)}</span>
+      </div>
+      <div class="hist-cot-cliente">${escH(c.cliente || 'Sin cliente')}</div>
+      ${rol === 'admin' && c.creadoPorNombre
+        ? `<div class="hist-cot-autor">👤 ${escH(c.creadoPorNombre)}</div>` : ''}
+      <div class="hist-cot-meta">
+        <span>${(c.items||[]).length} ítem(s)</span>
+        <span style="font-weight:700;color:var(--orange);">${fCOP(c.total||0)}</span>
+      </div>
+      <div class="hist-cot-actions">
+        <button class="btn btn-primary btn-sm" onclick="cargarCotizacionGuardada('${c.id}')">📂 Abrir</button>
+        ${(rol === 'admin' || c.creadoPor === userEmail)
+          ? `<button class="btn btn-sm" style="color:var(--danger);border:1.5px solid var(--danger);background:transparent;" onclick="eliminarCotizacionGuardada('${c.id}')">🗑️ Eliminar</button>`
+          : ''}
+      </div>
+    </div>`).join('');
+}
+
+function cargarCotizacionGuardada(id) {
+  const cot = _getCotCache().find(c => c.id === id);
+  if (!cot) { toast('Cotización no encontrada', 'error'); return; }
+  if (window._cotItems.length > 0 &&
+      !confirm('Hay una cotización en progreso. ¿Cargarla y descartar los cambios actuales?')) return;
+
+  const set = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val || ''; };
+  set('cliente',    cot.cliente);
+  set('num_cot',    cot.numero);
+  set('fecha',      cot.fecha);
+  set('condiciones',cot.condiciones);
+  set('ciudad',     cot.ciudad);
+  set('contacto',   cot.contacto);
+  set('validez',    cot.validez);
+  set('notas-extra',cot.notasExtra);
+
+  window._cotItems = (cot.items || []).map(i => ({ ...i }));
+  cerrarHistorial();
+  renderItems();
+  updateSummary();
+  switchTab('cotizar');
+  toast(`📂 Cotización ${cot.numero} cargada`, 'success');
+}
+
+function eliminarCotizacionGuardada(id) {
+  if (!confirm('¿Eliminar esta cotización del historial? Esta acción no se puede deshacer.')) return;
+  _saveCotCache(_getCotCache().filter(c => c.id !== id));
+  if (typeof Sync !== 'undefined') {
+    Sync.deleteCotizacion(id).catch(e => console.warn('Delete cot sync failed:', e));
+  }
+  _renderHistorialCots();
+  toast('Cotización eliminada del historial', 'success');
+}
+
 // ── PESTAÑA CONSULTA ──────────────────────────────────────────────
 let _consultaSelected = null;
 
