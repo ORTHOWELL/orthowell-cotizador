@@ -109,6 +109,26 @@ function agregarManual(guardarEnCatalogo) {
   renderItems();
 }
 
+// ── NÚMERO DE COTIZACIÓN (consecutivo diario por usuario) ─────────
+function generarNumeroCot(userInfo) {
+  const name  = (userInfo?.name || userInfo?.email || '').toUpperCase().trim();
+  const words = name.split(/\s+/);
+  const initials = words.length >= 2
+    ? (words[0][0] || 'X') + (words[1][0] || 'X')
+    : (name.substring(0, 2) || 'XX');
+
+  const now  = new Date();
+  const dd   = String(now.getDate()).padStart(2, '0');
+  const mm   = String(now.getMonth() + 1).padStart(2, '0');
+  const yyyy = now.getFullYear();
+
+  const key = `ow_cot_seq_${initials}_${dd}${mm}${yyyy}`;
+  const seq = parseInt(localStorage.getItem(key) || '0') + 1;
+  localStorage.setItem(key, String(seq));
+
+  return `${initials}${dd}${mm}-${String(seq).padStart(3, '0')}`;
+}
+
 // ── RENDER TABLA DE ÍTEMS ─────────────────────────────────────────
 function renderItems() {
   const c = document.getElementById('items-container');
@@ -265,9 +285,8 @@ function limpiarFormulario() {
   });
   const fecha = document.getElementById('fecha');
   if (fecha) fecha.valueAsDate = new Date();
-  const d = new Date();
   const numEl = document.getElementById('num_cot');
-  if (numEl) numEl.value = `AO${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-1`;
+  if (numEl && typeof Auth !== 'undefined') numEl.value = generarNumeroCot(Auth.getUser());
   renderItems();
   toast('Formulario limpiado', 'success');
 }

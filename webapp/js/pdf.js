@@ -248,7 +248,7 @@ const Pdf = (() => {
         doc.roundedRect(rx,y,rW,BH*4+2,2,2,'F'); doc.setDrawColor(...BD); doc.roundedRect(rx,y,rW,BH*4+2,2,2,'S');
         [
           ['Cliente:',cliente.toUpperCase(),'Fecha:',fechaStr],
-          ['Id.','','Condiciones:',condicion],
+          ['N° Cot.:',numCot,'Condiciones:',condicion],
           ['Dirección',ciudad.toUpperCase(),'',''],
           ['Contacto:',contacto.toUpperCase(),'Página',pageNum+' de '+totalPagesExp]
         ].forEach((r,i) => {

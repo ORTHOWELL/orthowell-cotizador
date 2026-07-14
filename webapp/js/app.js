@@ -47,12 +47,9 @@ const App = (() => {
     // Inicializar catálogo desde cache local (para mostrar algo inmediatamente)
     Catalog.init();
 
-    // Inicializar fecha y número de cotización
+    // Inicializar fecha (el número de cotización se genera en afterAuth cuando ya hay usuario)
     const fecha = document.getElementById('fecha');
     if (fecha) fecha.valueAsDate = new Date();
-    const d = new Date();
-    const numEl = document.getElementById('num_cot');
-    if (numEl) numEl.value = `AO${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-1`;
 
     // Cerrar dropdown de búsqueda al clic fuera
     document.addEventListener('click', e => {
@@ -173,6 +170,12 @@ const App = (() => {
         console.warn('Could not load orders from Sheets, using local cache:', e);
         Orders.init();
       }
+    }
+
+    // Generar número de cotización con iniciales del usuario y consecutivo del día
+    const numEl = document.getElementById('num_cot');
+    if (numEl && typeof generarNumeroCot === 'function') {
+      numEl.value = generarNumeroCot(user);
     }
 
     // Renderizar UI

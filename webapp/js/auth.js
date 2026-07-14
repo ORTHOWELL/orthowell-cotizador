@@ -100,11 +100,28 @@ const Auth = (() => {
       if (typeof App !== 'undefined') App.afterAuth();
     });
 
-    // Auto-renovar token antes de expirar
-    const renewIn = (resp.expires_in - 120) * 1000;
-    setTimeout(() => {
-      if (_tokenClient) _tokenClient.requestAccessToken({ prompt: '' });
-    }, Math.max(renewIn, 60000));
+    _scheduleRenewal(resp.expires_in);
+  }
+
+  // ── RENOVACIÓN DE TOKEN EN SEGUNDO PLANO ────────────────────────
+  function _scheduleRenewal(expiresIn) {
+    const ms = Math.max((expiresIn - 300) * 1000, 60000); // 5 min antes de expirar
+    setTimeout(_backgroundRenew, ms);
+  }
+
+  function _backgroundRenew() {
+    if (!_tokenClient) return;
+    const orig = _tokenClient.callback;
+    _tokenClient.callback = (resp) => {
+      _tokenClient.callback = orig;
+      if (resp.error) return; // fallo silencioso — ensureToken() maneja si se necesita
+      _token = resp.access_token;
+      _tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
+      localStorage.setItem('ow_token', _token);
+      localStorage.setItem('ow_token_exp', _tokenExpiry.toString());
+      _scheduleRenewal(resp.expires_in);
+    };
+    _tokenClient.requestAccessToken({ prompt: '' });
   }
 
   // ── LOGIN / LOGOUT ───────────────────────────────────────────────
