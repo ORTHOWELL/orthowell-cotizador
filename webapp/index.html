@@ -220,7 +220,7 @@
       <input type="text" id="consulta-input"
         style="width:100%;padding:14px 52px 14px 44px;font-size:16px;border-radius:12px;border:2px solid var(--border);"
         placeholder="Buscar producto por nombre, referencia o marca..."
-        oninput="consultaBuscar(this.value)" autocomplete="off"/>
+        oninput="consultaBuscarDebounced(this.value)" autocomplete="off"/>
       <button onclick="abrirEscaner('consulta')" title="Escanear código de barras" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:6px;border-radius:8px;color:#888;display:flex;align-items:center;">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"><rect x="2" y="3" width="2.5" height="18"/><rect x="6.5" y="3" width="1.2" height="18"/><rect x="9.5" y="3" width="3" height="18"/><rect x="14.5" y="3" width="1.2" height="18"/><rect x="17.5" y="3" width="2.5" height="18"/></svg>
       </button>

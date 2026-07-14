@@ -462,6 +462,12 @@ function eliminarCotizacionGuardada(id) {
 
 // ── PESTAÑA CONSULTA ──────────────────────────────────────────────
 let _consultaSelected = null;
+let _consultaTimer = null;
+
+function consultaBuscarDebounced(q) {
+  clearTimeout(_consultaTimer);
+  _consultaTimer = setTimeout(() => consultaBuscar(q), 250);
+}
 
 function consultaBuscar(q) {
   const ql = q.trim().toLowerCase();
