@@ -154,14 +154,15 @@ const Pdf = (() => {
 
   // ── GENERAR PDF ──────────────────────────────────────────────────
   async function generarPDF() {
-    const cliente   = document.getElementById('cliente').value.trim();
-    const numCot    = document.getElementById('num_cot').value.trim();
-    const fechaVal  = document.getElementById('fecha').value;
-    const condicion = document.getElementById('condiciones').value;
-    const ciudad    = document.getElementById('ciudad').value.trim();
-    const contacto  = document.getElementById('contacto').value.trim();
-    const validez   = document.getElementById('validez').value;
-    const notas     = document.getElementById('notas-extra').value.trim();
+    const cliente     = document.getElementById('cliente').value.trim();
+    const nitCliente  = document.getElementById('nit_cliente')?.value.trim() || '';
+    const numCot      = document.getElementById('num_cot').value.trim();
+    const fechaVal    = document.getElementById('fecha').value;
+    const condicion   = document.getElementById('condiciones').value;
+    const ciudad      = document.getElementById('ciudad').value.trim();
+    const contacto    = document.getElementById('contacto').value.trim();
+    const validez     = document.getElementById('validez').value;
+    const notas       = document.getElementById('notas-extra').value.trim();
 
     if (!cliente) { toast('Ingresa el nombre del cliente', 'error'); return; }
     if (!window._cotItems.length) { toast('Agrega al menos un producto', 'error'); return; }
@@ -248,8 +249,8 @@ const Pdf = (() => {
         doc.roundedRect(rx,y,rW,BH*4+2,2,2,'F'); doc.setDrawColor(...BD); doc.roundedRect(rx,y,rW,BH*4+2,2,2,'S');
         [
           ['Cliente:',cliente.toUpperCase(),'Fecha:',fechaStr],
-          ['N° Cot.:',numCot,'Condiciones:',condicion],
-          ['Dirección',ciudad.toUpperCase(),'',''],
+          ['NIT/ID:',nitCliente.toUpperCase(),'N° Cot.:',numCot],
+          ['Condiciones:',condicion,'Ciudad:',ciudad.toUpperCase()],
           ['Contacto:',contacto.toUpperCase(),'Página',pageNum+' de '+totalPagesExp]
         ].forEach((r,i) => {
           const cy=y+5+i*BH;

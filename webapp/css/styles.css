@@ -567,7 +567,7 @@ textarea { resize: vertical; min-height: 60px; }
     font-size: 10px; font-weight: 700; text-transform: uppercase;
     color: var(--muted); white-space: nowrap;
   }
-  .items-table td:nth-child(4) input { max-width: 70px; text-align: center; }
+  .items-table td:nth-child(4) input { max-width: 84px; text-align: center; }
   /* Vr Unit — columna ?, fila 3 */
   .items-table td:nth-child(5) {
     grid-column: 2 / 4; grid-row: 3;

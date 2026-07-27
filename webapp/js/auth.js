@@ -46,8 +46,10 @@ const Auth = (() => {
         _token = localStorage.getItem('ow_token');
         _tokenExpiry = parseInt(localStorage.getItem('ow_token_exp') || '0');
         if (_token && Date.now() < _tokenExpiry) {
-          // Token aún válido → entrar directo
+          // Token aún válido → entrar directo y programar renovación automática
           _showApp();
+          const msLeft = _tokenExpiry - Date.now();
+          setTimeout(_backgroundRenew, Math.max(msLeft - 240000, 60000));
           return true;
         }
         if (_userInfo) {
@@ -169,6 +171,7 @@ const Auth = (() => {
         _tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
         localStorage.setItem('ow_token', _token);
         localStorage.setItem('ow_token_exp', _tokenExpiry.toString());
+        _scheduleRenewal(resp.expires_in);
         resolve(_token);
       };
       _tokenClient.requestAccessToken({ prompt: '' });

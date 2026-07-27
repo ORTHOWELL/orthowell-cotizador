@@ -147,7 +147,7 @@ function renderItems() {
     '<th style="width:48px;">IMG</th>' +
     '<th style="width:26px;">#</th>' +
     '<th>Descripción / Observaciones</th>' +
-    '<th style="width:80px;">Cant.</th>' +
+    '<th style="width:94px;">Cant.</th>' +
     '<th style="width:130px;">Vr. Unit.</th>' +
     '<th style="width:110px;">Vr. Total</th>' +
     '<th style="width:30px;"></th>' +
@@ -279,7 +279,7 @@ function updateSummary() {
 function limpiarFormulario() {
   if (!confirm('¿Limpiar toda la cotización?')) return;
   window._cotItems = [];
-  ['cliente','contacto','notas-extra'].forEach(id => {
+  ['cliente','nit_cliente','contacto','notas-extra'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -326,6 +326,7 @@ function guardarCotizacion() {
     creadoPor:        user?.email || '',
     creadoPorNombre:  user?.name  || user?.email || '',
     cliente:          document.getElementById('cliente')?.value.trim()     || '',
+    nitCliente:       document.getElementById('nit_cliente')?.value.trim() || '',
     contacto:         document.getElementById('contacto')?.value.trim()    || '',
     ciudad:           document.getElementById('ciudad')?.value.trim()      || '',
     condiciones:      document.getElementById('condiciones')?.value        || '',
@@ -434,6 +435,7 @@ function cargarCotizacionGuardada(id) {
 
   const set = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val || ''; };
   set('cliente',    cot.cliente);
+  set('nit_cliente',cot.nitCliente);
   set('num_cot',    cot.numero);
   set('fecha',      cot.fecha);
   set('condiciones',cot.condiciones);
