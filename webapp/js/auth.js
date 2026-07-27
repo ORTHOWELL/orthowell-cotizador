@@ -9,6 +9,7 @@ const Auth = (() => {
   let _userInfo = null;
   let _tokenClient = null;
   let _silentRefresh = false;
+  let _backgroundRenewing = false; // true mientras hay una renovación en curso
 
   // ── INIT ──────────────────────────────────────────────────────────
   async function init() {
@@ -38,6 +39,17 @@ const Auth = (() => {
       callback: _handleTokenResponse,
     });
 
+    // Seguro periódico: cada 4 minutos verifica si el token está próximo a expirar.
+    // Esto garantiza renovación aunque los timers de setTimeout fallen (ej: mobile sleep).
+    setInterval(() => {
+      if (_token && _tokenClient && _userInfo) {
+        const msLeft = _tokenExpiry - Date.now();
+        if (msLeft > 0 && msLeft <= 600000) { // menos de 10 minutos
+          _backgroundRenew();
+        }
+      }
+    }, 4 * 60 * 1000);
+
     // Intentar restaurar sesión
     const saved = localStorage.getItem('ow_user');
     if (saved) {
@@ -54,10 +66,10 @@ const Auth = (() => {
         }
         if (_userInfo) {
           // Token expirado pero hay sesión guardada → renovar silenciosamente.
-          // Si Google sigue con sesión activa en el dispositivo, entra sin popup.
-          // Si falla (sesión de Google cerrada), _handleTokenResponse muestra login.
+          // Si Google sigue con sesión activa, entra sin popup.
+          // Si falla, _handleTokenResponse muestra login.
           _silentRefresh = true;
-          _updateHeaderUser(); // mostrar nombre/avatar mientras carga
+          _updateHeaderUser();
           _tokenClient.requestAccessToken({ prompt: '' });
           return false;
         }
@@ -72,9 +84,17 @@ const Auth = (() => {
   // ── HANDLE TOKEN RESPONSE ────────────────────────────────────────
   function _handleTokenResponse(resp) {
     const wasSilent = _silentRefresh;
+    const wasBackground = _backgroundRenewing;
     _silentRefresh = false;
+    _backgroundRenewing = false;
+
     if (resp.error) {
-      console.warn('OAuth error:', resp.error);
+      console.warn('OAuth error:', resp.error, '| background:', wasBackground);
+      if (wasBackground) {
+        // Renovación en background falló — NO cerrar sesión, reintentar en 5 min.
+        setTimeout(_backgroundRenew, 5 * 60 * 1000);
+        return;
+      }
       if (!wasSilent) _showError('Error de autenticación: ' + resp.error);
       _showLogin();
       return;
@@ -85,7 +105,13 @@ const Auth = (() => {
     localStorage.setItem('ow_token', _token);
     localStorage.setItem('ow_token_exp', _tokenExpiry.toString());
 
-    // Obtener info del usuario
+    if (wasBackground) {
+      // Renovación background exitosa — solo actualizar token, no re-iniciar app
+      _scheduleRenewal(resp.expires_in);
+      return;
+    }
+
+    // Login normal → obtener info del usuario e iniciar app
     fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { Authorization: 'Bearer ' + _token }
     })
@@ -94,7 +120,6 @@ const Auth = (() => {
       _userInfo = info;
       localStorage.setItem('ow_user', JSON.stringify(info));
       _showApp();
-      // Iniciar la app después de autenticar
       if (typeof App !== 'undefined') App.afterAuth();
     })
     .catch(() => {
@@ -112,24 +137,41 @@ const Auth = (() => {
   }
 
   function _backgroundRenew() {
-    if (!_tokenClient) return;
+    if (!_tokenClient || _backgroundRenewing) return;
+    _backgroundRenewing = true;
+
+    // Doble protección: intercambiar callback (funciona si GIS usa referencia dinámica)
+    // + flag _backgroundRenewing (funciona si GIS usa el callback original).
     const orig = _tokenClient.callback;
-    _tokenClient.callback = (resp) => {
+    const timeout = setTimeout(() => {
+      // Si el callback no se dispara en 20s, restaurar y reintentar después
       _tokenClient.callback = orig;
-      if (resp.error) return; // fallo silencioso — ensureToken() maneja si se necesita
+      _backgroundRenewing = false;
+      setTimeout(_backgroundRenew, 5 * 60 * 1000);
+    }, 20000);
+
+    _tokenClient.callback = (resp) => {
+      clearTimeout(timeout);
+      _tokenClient.callback = orig;
+      _backgroundRenewing = false;
+      if (resp.error) {
+        console.warn('Background renewal error:', resp.error, '— retrying in 5 min');
+        setTimeout(_backgroundRenew, 5 * 60 * 1000);
+        return;
+      }
       _token = resp.access_token;
       _tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
       localStorage.setItem('ow_token', _token);
       localStorage.setItem('ow_token_exp', _tokenExpiry.toString());
       _scheduleRenewal(resp.expires_in);
     };
+
     _tokenClient.requestAccessToken({ prompt: '' });
   }
 
   // ── LOGIN / LOGOUT ───────────────────────────────────────────────
   function login() {
     if (!_tokenClient) {
-      // GIS puede haber cargado después del timeout de init() — intentar inicializar ahora
       if (window.google?.accounts && !CONFIG.GOOGLE_CLIENT_ID.startsWith('TODO')) {
         _tokenClient = google.accounts.oauth2.initTokenClient({
           client_id: CONFIG.GOOGLE_CLIENT_ID,
@@ -150,6 +192,7 @@ const Auth = (() => {
       google.accounts.oauth2.revoke(_token, () => {});
     }
     _token = null; _userInfo = null; _tokenExpiry = 0;
+    _backgroundRenewing = false;
     localStorage.removeItem('ow_token');
     localStorage.removeItem('ow_token_exp');
     localStorage.removeItem('ow_user');
