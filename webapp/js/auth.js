@@ -84,7 +84,10 @@ const Auth = (() => {
           _showRenewalBanner();
           // Intentar renovación silenciosa en background
           _silentRefresh = true;
-          setTimeout(() => _tokenClient.requestAccessToken({ prompt: 'none' }), 200);
+          setTimeout(() => _tokenClient.requestAccessToken({
+            prompt: 'none',
+            login_hint: _userInfo?.email || '',
+          }), 200);
           return false;
         }
       } catch(e) {}
@@ -233,9 +236,13 @@ const Auth = (() => {
       if (banner) banner.remove();
     };
 
-    // prompt:'none' = nunca abre popup/pestaña de Google; falla inmediatamente si no puede
-    // renovar en silencio. Esto evita que aparezca una pantalla de login inesperada.
-    _tokenClient.requestAccessToken({ prompt: 'none' });
+    // prompt:'' = renovar silenciosamente si es posible; si Google necesita UI la muestra
+    // brevemente (< 1 s) y luego cierra automáticamente para cuentas ya autorizadas.
+    // login_hint le dice a Google exactamente qué cuenta usar, mejorando el éxito silencioso.
+    _tokenClient.requestAccessToken({
+      prompt: '',
+      login_hint: _userInfo?.email || '',
+    });
   }
 
   // ── LOGIN / LOGOUT ───────────────────────────────────────────────
