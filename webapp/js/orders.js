@@ -355,7 +355,7 @@ function renderOrderDetail(id) {
       <div style="height:5px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:12px;">
         <div style="height:100%;width:${pct}%;background:${pct === 100 ? '#10b981' : 'var(--orange)'};border-radius:4px;"></div>
       </div>
-      ${_renderItemsTable(order.items || [])}
+      ${_renderItemsTable(order.items || [], isOwn && activo, order.notas || '')}
     </div>
 
     ${(order.archivos || []).length ? `
@@ -421,39 +421,105 @@ function _renderArchivoThumb(a) {
   </div>`;
 }
 
-function _renderItemsTable(items) {
-  if (!items.length) return '<p style="color:var(--muted);font-size:13px;margin:0;">Sin ítems registrados.</p>';
+function _renderItemsTable(items, editable, notasOrder) {
+  if (!items.length) {
+    if (editable) {
+      return `
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Sin ítems registrados. Puedes dejar notas generales del pedido:</div>
+        <textarea id="pedido-notas-empty" rows="7"
+          placeholder="Escribe notas, instrucciones especiales o detalles del pedido…"
+          style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box;"
+        >${escH(notasOrder || '')}</textarea>
+        <div style="margin-top:8px;display:flex;justify-content:flex-end;">
+          <button onclick="pedidoGuardarNotas()"
+            style="padding:7px 18px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar notas</button>
+        </div>`;
+    }
+    return '<p style="color:var(--muted);font-size:13px;margin:0;">Sin ítems registrados.</p>';
+  }
+
+  const _itemEstados = ['PENDIENTE','SOLICITADO','EN_TRANSITO','RECIBIDO_BODEGA','ENTREGADO'];
+  const _itemEstadoLabels = { PENDIENTE:'Pendiente', SOLICITADO:'Solicitado', EN_TRANSITO:'En tránsito', RECIBIDO_BODEGA:'En bodega', ENTREGADO:'Entregado' };
+
+  if (!editable) {
+    return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:440px;">
+      <thead>
+        <tr style="background:var(--surface2);">
+          <th style="padding:7px 8px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;">Descripción</th>
+          <th style="padding:7px 8px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;">Proveedor</th>
+          <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;">Pedido</th>
+          <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;">Entregado</th>
+          <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;">Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map(item => {
+          const si = _itemEstadoInfo(item.estadoItem || 'PENDIENTE');
+          const completo = (item.cantEntregada || 0) >= (item.cant || 0) && (item.cant || 0) > 0;
+          return `<tr style="border-bottom:1px solid var(--border-light);">
+            <td style="padding:7px 8px;">
+              <div style="font-weight:500;">${escH(item.desc || '')}</div>
+              ${item.ref ? `<div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;">${escH(item.ref)}</div>` : ''}
+              ${item.notas ? `<div style="font-size:10px;color:var(--muted);font-style:italic;">${escH(item.notas)}</div>` : ''}
+            </td>
+            <td style="padding:7px 8px;color:var(--muted);">${escH(item.proveedor || '—')}</td>
+            <td style="padding:7px 8px;text-align:center;font-weight:700;">${item.cant || 0}</td>
+            <td style="padding:7px 8px;text-align:center;font-weight:700;color:${completo ? '#10b981' : 'var(--text)'};">${item.cantEntregada || 0}</td>
+            <td style="padding:7px 8px;text-align:center;">
+              <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${si.bg};color:${si.color};">${si.label}</span>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div>`;
+  }
+
+  // Tabla editable
+  const inpS = 'padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:#fff;width:100%;box-sizing:border-box;';
   return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-  <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:440px;">
+  <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:680px;">
     <thead>
       <tr style="background:var(--surface2);">
-        <th style="padding:7px 8px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;">Descripción</th>
-        <th style="padding:7px 8px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;">Proveedor</th>
-        <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;">Pedido</th>
-        <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;">Entregado</th>
-        <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;">Estado</th>
+        <th style="padding:7px 8px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;min-width:150px;">Descripción</th>
+        <th style="padding:7px 8px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;min-width:90px;">Referencia</th>
+        <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;width:68px;">Cant.</th>
+        <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;min-width:120px;">Estado ítem</th>
+        <th style="padding:7px 8px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;min-width:140px;">Observaciones</th>
       </tr>
     </thead>
     <tbody>
-      ${items.map(item => {
-        const si = _itemEstadoInfo(item.estadoItem || 'PENDIENTE');
-        const completo = (item.cantEntregada || 0) >= (item.cant || 0) && (item.cant || 0) > 0;
-        return `<tr style="border-bottom:1px solid var(--border-light);">
-          <td style="padding:7px 8px;">
-            <div style="font-weight:500;">${escH(item.desc || '')}</div>
-            ${item.ref ? `<div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;">${escH(item.ref)}</div>` : ''}
-            ${item.notas ? `<div style="font-size:10px;color:var(--muted);font-style:italic;">${escH(item.notas)}</div>` : ''}
+      ${items.map((item, i) => `
+        <tr style="border-bottom:1px solid var(--border-light);">
+          <td style="padding:5px 8px;">
+            <input type="text" value="${escH(item.desc||'')}" data-idx="${i}" data-field="desc"
+              class="item-edit-inp" style="${inpS}min-width:140px;">
           </td>
-          <td style="padding:7px 8px;color:var(--muted);">${escH(item.proveedor || '—')}</td>
-          <td style="padding:7px 8px;text-align:center;font-weight:700;">${item.cant || 0}</td>
-          <td style="padding:7px 8px;text-align:center;font-weight:700;color:${completo ? '#10b981' : 'var(--text)'};">${item.cantEntregada || 0}</td>
-          <td style="padding:7px 8px;text-align:center;">
-            <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${si.bg};color:${si.color};">${si.label}</span>
+          <td style="padding:5px 8px;">
+            <input type="text" value="${escH(item.ref||'')}" data-idx="${i}" data-field="ref"
+              class="item-edit-inp" style="${inpS}min-width:80px;font-family:'DM Mono',monospace;">
           </td>
-        </tr>`;
-      }).join('')}
+          <td style="padding:5px 8px;text-align:center;">
+            <input type="number" min="0" value="${item.cant||0}" data-idx="${i}" data-field="cant"
+              class="item-edit-inp" style="padding:4px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:#fff;width:56px;text-align:center;">
+          </td>
+          <td style="padding:5px 8px;text-align:center;">
+            <select data-idx="${i}" data-field="estadoItem" class="item-edit-sel"
+              style="padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:#fff;cursor:pointer;width:100%;">
+              ${_itemEstados.map(e => `<option value="${e}"${(item.estadoItem||'PENDIENTE')===e?' selected':''}>${_itemEstadoLabels[e]||e}</option>`).join('')}
+            </select>
+          </td>
+          <td style="padding:5px 8px;">
+            <input type="text" value="${escH(item.notas||'')}" data-idx="${i}" data-field="notas"
+              class="item-edit-inp" placeholder="Observaciones…" style="${inpS}min-width:130px;">
+          </td>
+        </tr>`).join('')}
     </tbody>
-  </table></div>`;
+  </table></div>
+  <div style="margin-top:10px;display:flex;justify-content:flex-end;">
+    <button onclick="pedidoGuardarItems()"
+      style="padding:7px 18px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar cambios en ítems</button>
+  </div>`;
 }
 
 function _renderTimeline(eventos) {
@@ -537,7 +603,39 @@ function pedidoEliminar() {
   toast('Orden eliminada', 'success');
 }
 
-// ── REGISTRAR ENTREGA ────────────────────────────────────────────────
+// ── GUARDAR EDICIÓN DE ÍTEMS ─────────────────────────────────────────
+function pedidoGuardarItems() {
+  const order = Orders.getById(_currentOrderId);
+  if (!order || !order.items) return;
+  document.querySelectorAll('.item-edit-inp').forEach(inp => {
+    const idx = parseInt(inp.dataset.idx);
+    const field = inp.dataset.field;
+    if (field === 'cant') order.items[idx].cant = parseInt(inp.value) || 0;
+    else order.items[idx][field] = inp.value.trim();
+  });
+  document.querySelectorAll('.item-edit-sel').forEach(sel => {
+    const idx = parseInt(sel.dataset.idx);
+    order.items[idx].estadoItem = sel.value;
+  });
+  const usuario = Auth.getUser()?.email || '';
+  Orders.update(_currentOrderId, { items: order.items });
+  Orders.addEvent(_currentOrderId, 'NOTA', 'Ítems actualizados', usuario);
+  Sync.saveOrder(Orders.getById(_currentOrderId)).catch(e => console.warn('saveOrder:', e));
+  renderOrderDetail(_currentOrderId);
+  toast('✓ Ítems actualizados', 'success');
+}
+
+function pedidoGuardarNotas() {
+  const val = (document.getElementById('pedido-notas-empty')?.value || '').trim();
+  const usuario = Auth.getUser()?.email || '';
+  Orders.update(_currentOrderId, { notas: val });
+  Orders.addEvent(_currentOrderId, 'NOTA', 'Notas actualizadas', usuario);
+  Sync.saveOrder(Orders.getById(_currentOrderId)).catch(e => console.warn('saveOrder:', e));
+  renderOrderDetail(_currentOrderId);
+  toast('✓ Notas guardadas', 'success');
+}
+
+// ── REGISTRAR ENTREGA ─────────────────────────────────────────────────
 function pedidoRegistrarEntrega() {
   const order = Orders.getById(_currentOrderId);
   if (!order || !(order.items || []).length) { toast('Sin ítems para registrar', 'error'); return; }
