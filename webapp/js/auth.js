@@ -11,7 +11,6 @@ const Auth = (() => {
   let _silentRefresh = false;
   let _backgroundRenewing = false;
   let _loginRequested = false;  // true SOLO cuando el usuario hace clic en "Ingresar"
-  let _appReady = false;        // true después de que App.afterAuth() se ejecutó al menos una vez
 
   // ── INIT ──────────────────────────────────────────────────────────
   async function init() {
@@ -44,11 +43,8 @@ const Auth = (() => {
     setInterval(() => {
       if (!_token || !_tokenClient || !_userInfo) return;
       const msLeft = _tokenExpiry - Date.now();
-      if (msLeft <= 0) {
-        // Token ya expirado — aviso al usuario
-        _showRenewalBanner();
-      } else if (msLeft <= 10 * 60 * 1000) {
-        // Menos de 10 min — renovar en background
+      // Renovar en background cuando queda ≤ 10 min O ya expiró
+      if (msLeft <= 10 * 60 * 1000) {
         _backgroundRenew();
       }
     }, 4 * 60 * 1000);
@@ -57,9 +53,8 @@ const Auth = (() => {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden || !_token || !_tokenClient || !_userInfo) return;
       const msLeft = _tokenExpiry - Date.now();
-      if (msLeft <= 0) {
-        _showRenewalBanner();
-      } else if (msLeft <= 10 * 60 * 1000) {
+      // Renovar en background cuando queda ≤ 10 min O ya expiró
+      if (msLeft <= 10 * 60 * 1000) {
         _backgroundRenew();
       }
     });
@@ -89,7 +84,7 @@ const Auth = (() => {
           _showRenewalBanner();
           // Intentar renovación silenciosa en background
           _silentRefresh = true;
-          setTimeout(() => _tokenClient.requestAccessToken({ prompt: '' }), 200);
+          setTimeout(() => _tokenClient.requestAccessToken({ prompt: 'none' }), 200);
           return false;
         }
       } catch(e) {}
@@ -118,8 +113,9 @@ const Auth = (() => {
       }
 
       if (wasSilent) {
-        // Renovación silenciosa falló — el banner ya está visible (lo pusimos en init).
-        // No hacer nada más; el usuario puede usar la app y pulsar "Renovar".
+        // Renovación silenciosa al inicio falló — el banner ya está visible.
+        // Programar reintento para que el sistema siga intentando en background.
+        if (_userInfo) _onRenewalFailed();
         return;
       }
 
@@ -170,18 +166,12 @@ const Auth = (() => {
 
   // ── CUANDO FALLA UNA RENOVACIÓN ──────────────────────────────────
   function _onRenewalFailed() {
+    if (_userInfo) _showRenewalBanner();
     const msLeft = _tokenExpiry - Date.now();
-    if (msLeft <= 0) {
-      // Ya expiró → mostrar banner (o ya está)
-      if (_userInfo) _showRenewalBanner();
-      return;
-    }
-    if (msLeft <= 10 * 60 * 1000 && _userInfo) {
-      // Expira en < 10 min → mostrar banner proactivo
-      _showRenewalBanner();
-    }
-    // Reintentar: cuanto menos tiempo quede, más frecuente el reintento
-    const delay = Math.min(5 * 60 * 1000, Math.max(Math.floor(msLeft / 3), 30000));
+    // Siempre programar reintento: si expiró → cada 5 min; si no → proporcional al tiempo restante
+    const delay = msLeft <= 0
+      ? 5 * 60 * 1000
+      : Math.min(5 * 60 * 1000, Math.max(Math.floor(msLeft / 3), 30000));
     setTimeout(_backgroundRenew, delay);
   }
 
@@ -243,7 +233,9 @@ const Auth = (() => {
       if (banner) banner.remove();
     };
 
-    _tokenClient.requestAccessToken({ prompt: '' });
+    // prompt:'none' = nunca abre popup/pestaña de Google; falla inmediatamente si no puede
+    // renovar en silencio. Esto evita que aparezca una pantalla de login inesperada.
+    _tokenClient.requestAccessToken({ prompt: 'none' });
   }
 
   // ── LOGIN / LOGOUT ───────────────────────────────────────────────
@@ -260,10 +252,12 @@ const Auth = (() => {
         return;
       }
     }
-    // Cancelar cualquier estado de renovación en curso para que el callback esté libre
+    // Cancelar renovación en curso y restaurar callback original
+    // (si _backgroundRenew lo había intercambiado, el login usaría el callback equivocado)
     _backgroundRenewing = false;
     _silentRefresh = false;
     _loginRequested = true;
+    _tokenClient.callback = _handleTokenResponse;
     document.getElementById('auth-error').textContent = '';
     _tokenClient.requestAccessToken({ prompt: 'select_account' });
   }
@@ -271,7 +265,7 @@ const Auth = (() => {
   function logout() {
     if (_token) google.accounts.oauth2.revoke(_token, () => {});
     _token = null; _userInfo = null; _tokenExpiry = 0;
-    _backgroundRenewing = false; _loginRequested = false; _appReady = false;
+    _backgroundRenewing = false; _loginRequested = false; _silentRefresh = false;
     localStorage.removeItem('ow_token');
     localStorage.removeItem('ow_token_exp');
     localStorage.removeItem('ow_user');
