@@ -104,10 +104,17 @@ const App = (() => {
     // Inicializar autenticación
     const authReady = await Auth.init();
     if (authReady) {
-      // Ya tenía sesión
+      // Sesión válida — inicializar app completa
       await afterAuth();
+    } else if (Auth.getUser()) {
+      // Token expirado pero usuario guardado — mostrar datos del caché mientras
+      // la renovación silenciosa se completa. El banner naranja ya está visible.
+      renderCatalog();
+      updateSummary();
+      if (typeof Orders !== 'undefined') Orders.init();
+      if (typeof renderOrdersList === 'function') renderOrdersList();
     }
-    // Si no hay sesión, el auth.js muestra el overlay de login
+    // Si no hay sesión, auth.js ya mostró el overlay de login
   }
 
   // ── AFTER AUTH (después de login exitoso) ────────────────────────

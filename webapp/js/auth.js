@@ -11,6 +11,7 @@ const Auth = (() => {
   let _silentRefresh = false;
   let _backgroundRenewing = false;
   let _loginRequested = false;  // true SOLO cuando el usuario hace clic en "Ingresar"
+  let _appReady = false;        // true después de que App.afterAuth() se ejecutó al menos una vez
 
   // ── INIT ──────────────────────────────────────────────────────────
   async function init() {
@@ -44,21 +45,21 @@ const Auth = (() => {
       if (!_token || !_tokenClient || !_userInfo) return;
       const msLeft = _tokenExpiry - Date.now();
       if (msLeft <= 0) {
-        // Token ya expirado y no se renovó — mostrar aviso al usuario
+        // Token ya expirado — aviso al usuario
         _showRenewalBanner();
-      } else if (msLeft <= 600000) {
+      } else if (msLeft <= 10 * 60 * 1000) {
         // Menos de 10 min — renovar en background
         _backgroundRenew();
       }
     }, 4 * 60 * 1000);
 
-    // ── Seguro 2: detectar cuando la app vuelve al frente (móvil)
+    // ── Seguro 2: detectar cuando la app vuelve al frente (móvil / tab)
     document.addEventListener('visibilitychange', () => {
       if (document.hidden || !_token || !_tokenClient || !_userInfo) return;
       const msLeft = _tokenExpiry - Date.now();
       if (msLeft <= 0) {
         _showRenewalBanner();
-      } else if (msLeft <= 600000) {
+      } else if (msLeft <= 10 * 60 * 1000) {
         _backgroundRenew();
       }
     });
@@ -70,21 +71,31 @@ const Auth = (() => {
         _userInfo = JSON.parse(saved);
         _token = localStorage.getItem('ow_token');
         _tokenExpiry = parseInt(localStorage.getItem('ow_token_exp') || '0');
+
         if (_token && Date.now() < _tokenExpiry) {
+          // ── Token válido ─────────────────────────────────────────
           _showApp();
           const msLeft = _tokenExpiry - Date.now();
-          setTimeout(_backgroundRenew, Math.max(msLeft - 240000, 60000));
+          // Renovar anticipadamente a los 10 min antes de expirar
+          setTimeout(_backgroundRenew, Math.max(msLeft - 10 * 60 * 1000, 60000));
           return true;
         }
+
         if (_userInfo) {
+          // ── Token expirado pero usuario guardado ─────────────────
+          // MOSTRAR LA APP INMEDIATAMENTE con banner — NUNCA mostrar el login overlay.
+          // El usuario NO debe ver la pantalla de inicio de sesión por un token expirado.
+          _showApp();
+          _showRenewalBanner();
+          // Intentar renovación silenciosa en background
           _silentRefresh = true;
-          _updateHeaderUser();
-          _tokenClient.requestAccessToken({ prompt: '' });
+          setTimeout(() => _tokenClient.requestAccessToken({ prompt: '' }), 200);
           return false;
         }
       } catch(e) {}
     }
 
+    // No hay sesión guardada → mostrar login
     _showLogin();
     return false;
   }
@@ -94,9 +105,9 @@ const Auth = (() => {
     const wasSilent     = _silentRefresh;
     const wasBackground = _backgroundRenewing;
     const wasLogin      = _loginRequested;
-    _silentRefresh     = false;
+    _silentRefresh      = false;
     _backgroundRenewing = false;
-    _loginRequested    = false;
+    _loginRequested     = false;
 
     if (resp.error) {
       console.warn('OAuth error:', resp.error, { wasSilent, wasBackground, wasLogin });
@@ -106,10 +117,9 @@ const Auth = (() => {
         return;
       }
 
-      if (wasSilent && _userInfo) {
-        // Renovación silenciosa al inicio falló — mostrar app con barra de aviso
-        _showApp();
-        _showRenewalBanner();
+      if (wasSilent) {
+        // Renovación silenciosa falló — el banner ya está visible (lo pusimos en init).
+        // No hacer nada más; el usuario puede usar la app y pulsar "Renovar".
         return;
       }
 
@@ -120,9 +130,7 @@ const Auth = (() => {
         return;
       }
 
-      // ── Caso clave: respuesta tardía de GIS después del timeout de 20s ──
-      // wasBackground y wasLogin son false porque el timeout los resetó antes de
-      // que llegara esta respuesta. NO cerrar sesión — tratar como fallo de renovación.
+      // ── Respuesta tardía/inesperada de GIS — NUNCA cerrar sesión ──
       if (_userInfo) _onRenewalFailed();
       return;
     }
@@ -134,8 +142,10 @@ const Auth = (() => {
     localStorage.setItem('ow_token_exp', _tokenExpiry.toString());
 
     if (wasBackground) {
-      // Renovación en background exitosa — solo actualizar token, no re-iniciar app
+      // Renovación en background exitosa — actualizar token y quitar banner si está
       _scheduleRenewal(resp.expires_in);
+      const banner = document.getElementById('session-renewal-banner');
+      if (banner) banner.remove();
       return;
     }
 
@@ -147,7 +157,7 @@ const Auth = (() => {
     .then(info => {
       _userInfo = info;
       localStorage.setItem('ow_user', JSON.stringify(info));
-      _showApp(); // quita el overlay y la barra de aviso
+      _showApp(); // quita overlay y banner
       if (typeof App !== 'undefined') App.afterAuth();
     })
     .catch(() => {
@@ -158,20 +168,20 @@ const Auth = (() => {
     _scheduleRenewal(resp.expires_in);
   }
 
-  // ── FALLO DE RENOVACIÓN EN BACKGROUND ───────────────────────────
+  // ── CUANDO FALLA UNA RENOVACIÓN ──────────────────────────────────
   function _onRenewalFailed() {
     const msLeft = _tokenExpiry - Date.now();
     if (msLeft <= 0) {
-      // Token ya expiró y no pudimos renovarlo → aviso inmediato al usuario
+      // Ya expiró → mostrar banner (o ya está)
       if (_userInfo) _showRenewalBanner();
       return;
     }
-    if (msLeft < 5 * 60 * 1000 && _userInfo) {
-      // Expira en menos de 5 min → aviso proactivo + seguir intentando
+    if (msLeft <= 10 * 60 * 1000 && _userInfo) {
+      // Expira en < 10 min → mostrar banner proactivo
       _showRenewalBanner();
     }
-    // Reintentar en 5 min (o antes si queda menos tiempo)
-    const delay = Math.min(5 * 60 * 1000, Math.max(msLeft - 60000, 30000));
+    // Reintentar: cuanto menos tiempo quede, más frecuente el reintento
+    const delay = Math.min(5 * 60 * 1000, Math.max(Math.floor(msLeft / 3), 30000));
     setTimeout(_backgroundRenew, delay);
   }
 
@@ -196,9 +206,10 @@ const Auth = (() => {
     document.body.appendChild(el);
   }
 
-  // ── RENOVACIÓN DE TOKEN EN SEGUNDO PLANO ────────────────────────
+  // ── RENOVACIÓN EN SEGUNDO PLANO ──────────────────────────────────
   function _scheduleRenewal(expiresIn) {
-    const ms = Math.max((expiresIn - 300) * 1000, 60000);
+    // Renovar 10 min antes de expirar (antes era 5 min, muy poco margen)
+    const ms = Math.max((expiresIn - 600) * 1000, 60000);
     setTimeout(_backgroundRenew, ms);
   }
 
@@ -206,16 +217,13 @@ const Auth = (() => {
     if (!_tokenClient || _backgroundRenewing) return;
     _backgroundRenewing = true;
 
-    // Intercambiar callback para que la respuesta no llegue a _handleTokenResponse.
-    // Si GIS responde tarde (después del timeout de 20s), la respuesta llegará a
-    // _handleTokenResponse con wasBackground=false — el caso "respuesta tardía" lo maneja.
     const orig = _tokenClient.callback;
     const timeoutId = setTimeout(() => {
-      // GIS no respondió en 20s — restaurar y reintentar
+      // GIS no respondió en 25s — restaurar y manejar como fallo
       _tokenClient.callback = orig;
       _backgroundRenewing = false;
       _onRenewalFailed();
-    }, 20000);
+    }, 25000);
 
     _tokenClient.callback = (resp) => {
       clearTimeout(timeoutId);
@@ -230,6 +238,9 @@ const Auth = (() => {
       localStorage.setItem('ow_token', _token);
       localStorage.setItem('ow_token_exp', _tokenExpiry.toString());
       _scheduleRenewal(resp.expires_in);
+      // Quitar banner si estaba por renovación exitosa en background
+      const banner = document.getElementById('session-renewal-banner');
+      if (banner) banner.remove();
     };
 
     _tokenClient.requestAccessToken({ prompt: '' });
@@ -249,7 +260,7 @@ const Auth = (() => {
         return;
       }
     }
-    // Cancelar cualquier renovación en background para que el callback esté libre
+    // Cancelar cualquier estado de renovación en curso para que el callback esté libre
     _backgroundRenewing = false;
     _silentRefresh = false;
     _loginRequested = true;
@@ -260,8 +271,7 @@ const Auth = (() => {
   function logout() {
     if (_token) google.accounts.oauth2.revoke(_token, () => {});
     _token = null; _userInfo = null; _tokenExpiry = 0;
-    _backgroundRenewing = false;
-    _loginRequested = false;
+    _backgroundRenewing = false; _loginRequested = false; _appReady = false;
     localStorage.removeItem('ow_token');
     localStorage.removeItem('ow_token_exp');
     localStorage.removeItem('ow_user');
@@ -272,8 +282,8 @@ const Auth = (() => {
   // ── ENSURE TOKEN (para llamadas a la API) ────────────────────────
   async function ensureToken() {
     if (_token && Date.now() < _tokenExpiry) return _token;
-    // Token expirado — mostrar aviso y rechazar en lugar de intentar un popup silencioso
-    // (los popups silenciosos fallan en iOS y pueden causar cierres inesperados de sesión)
+    // Token expirado — mostrar banner y rechazar.
+    // NO intentar popup silencioso (puede mostrar ventana de Google inesperada).
     if (_userInfo) _showRenewalBanner();
     throw new Error('session_expired');
   }
