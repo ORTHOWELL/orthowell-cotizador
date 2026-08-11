@@ -465,10 +465,13 @@ function eliminarCotizacionGuardada(id) {
 // ── PESTAÑA CONSULTA ──────────────────────────────────────────────
 let _consultaSelected = null;
 let _consultaTimer = null;
+let _consultaActiveEl = null;   // ref al item activo (evita querySelectorAll en cada clic)
+const _CONSULTA_MAX = 25;       // máximo de resultados en lista (más = más lento en móvil)
 
 function consultaBuscarDebounced(q) {
   clearTimeout(_consultaTimer);
-  _consultaTimer = setTimeout(() => consultaBuscar(q), 250);
+  // 400ms: da tiempo al teclado virtual a renderizar antes de hacer trabajo pesado
+  _consultaTimer = setTimeout(() => consultaBuscar(q), 400);
 }
 
 function consultaBuscar(q) {
@@ -483,15 +486,19 @@ function consultaBuscar(q) {
     bodyEl.style.display  = 'none';
     emptyEl.style.display = 'block';
     countEl.textContent   = '';
+    _consultaActiveEl = null;
     return;
   }
 
-  const res = Catalog.search(ql);
-  countEl.textContent = res.length
-    ? `${res.length} producto${res.length > 1 ? 's' : ''} encontrado${res.length > 1 ? 's' : ''}`
+  const allRes = Catalog.search(ql);
+  const res    = allRes.slice(0, _CONSULTA_MAX);   // cap para mantener fluidez
+  const extra  = allRes.length - res.length;
+
+  countEl.textContent = allRes.length
+    ? `${allRes.length} producto${allRes.length > 1 ? 's' : ''} encontrado${allRes.length > 1 ? 's' : ''}`
     : 'Sin resultados';
 
-  if (!res.length) {
+  if (!allRes.length) {
     bodyEl.style.display  = 'none';
     emptyEl.style.display = 'block';
     emptyEl.innerHTML = `<div class="icon">😕</div>
@@ -502,7 +509,8 @@ function consultaBuscar(q) {
 
   emptyEl.style.display = 'none';
   bodyEl.style.display  = 'flex';
-  titleEl.textContent   = `${res.length} resultado${res.length > 1 ? 's' : ''}`;
+  titleEl.textContent   = `${allRes.length} resultado${allRes.length > 1 ? 's' : ''}`;
+  _consultaActiveEl = null;
 
   listEl.innerHTML = '';
   const frag = document.createDocumentFragment();
@@ -531,25 +539,42 @@ function consultaBuscar(q) {
     item.appendChild(info);
     item.onmouseenter = () => { if (!item.classList.contains('active')) item.style.background = 'var(--orange-light)'; };
     item.onmouseleave = () => { if (!item.classList.contains('active')) item.style.background = 'var(--white)'; };
-    item.onclick = () => consultaMostrarDetalle(p, item);
+    item.onclick = () => consultaMostrarDetalle(p, item, false);
     frag.appendChild(item);
   });
+
+  // Indicador de resultados adicionales si hay más de _CONSULTA_MAX
+  if (extra > 0) {
+    const more = document.createElement('div');
+    more.style.cssText = 'padding:8px 14px;font-size:11px;color:var(--muted);font-style:italic;flex-basis:100%;';
+    more.textContent = `+ ${extra} más — afina la búsqueda para verlos`;
+    frag.appendChild(more);
+  }
+
   listEl.appendChild(frag);
-  if (res.length) consultaMostrarDetalle(res[0], listEl.firstChild);
+
+  // Mostrar detalle del primer resultado en el siguiente frame de render
+  // (permite que el browser pinte la lista antes de hacer el trabajo pesado del detalle)
+  if (res.length) requestAnimationFrame(() => consultaMostrarDetalle(res[0], listEl.firstChild, true));
 }
 
-function consultaMostrarDetalle(p, itemEl) {
+// autoSelect=true cuando se llama automáticamente al buscar (no hace scroll)
+// autoSelect=false cuando el usuario hace clic manualmente (sí hace scroll)
+function consultaMostrarDetalle(p, itemEl, autoSelect = false) {
   _consultaSelected = p;
-  document.querySelectorAll('.consulta-list-item').forEach(el => {
-    el.classList.remove('active');
-    el.style.background = 'var(--white)';
-    el.style.borderColor = 'var(--border-light)';
-  });
+  // Quitar activo del elemento anterior sin tocar todo el DOM
+  if (_consultaActiveEl && _consultaActiveEl !== itemEl) {
+    _consultaActiveEl.classList.remove('active');
+    _consultaActiveEl.style.background = 'var(--white)';
+    _consultaActiveEl.style.borderColor = 'var(--border-light)';
+  }
+  _consultaActiveEl = itemEl;
   if (itemEl) {
     itemEl.classList.add('active');
     itemEl.style.background = 'var(--orange-light)';
     itemEl.style.borderColor = 'var(--orange)';
-    itemEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    // Solo hacer scroll cuando el usuario hace clic (no en cada búsqueda automática)
+    if (!autoSelect) itemEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
   const rol = (typeof App !== 'undefined') ? App.getRol() : 'vendedor';
