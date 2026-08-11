@@ -707,9 +707,13 @@ function abrirNuevoPedido() {
   _newOrderItems   = [];
   _newOrderArchivos = [];
   ['np-cliente-nombre','np-cliente-nit','np-cliente-empresa','np-cliente-tel','np-cliente-email',
-   'np-cliente-dir','np-fecha-entrega','np-notas','np-item-desc','np-item-ref','np-item-proveedor']
+   'np-cliente-dir','np-fecha-entrega','np-notas','np-item-desc','np-item-ref','np-item-proveedor','np-catalog-q']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const cantEl = document.getElementById('np-item-cant'); if (cantEl) cantEl.value = '1';
+  // Resetear a modo manual
+  const catalogResults = document.getElementById('np-catalog-results');
+  if (catalogResults) catalogResults.style.display = 'none';
+  npItemMode('manual');
   const ctrEl  = document.getElementById('np-foto-count'); if (ctrEl) ctrEl.textContent = '0/3';
   const prevEl = document.getElementById('np-archivos-preview'); if (prevEl) prevEl.innerHTML = '';
   _renderNpItems();
@@ -754,6 +758,84 @@ function npAgregarItem() {
   const cantEl = document.getElementById('np-item-cant'); if (cantEl) cantEl.value = '1';
   _renderNpItems();
   document.getElementById('np-item-desc')?.focus();
+}
+
+// ── BÚSQUEDA DE CATÁLOGO EN NUEVA ORDEN ──────────────────────────
+let _npCatalogTimer = null;
+
+function npItemMode(mode) {
+  const panel      = document.getElementById('np-catalogo-panel');
+  const btnManual  = document.getElementById('np-btn-manual');
+  const btnCat     = document.getElementById('np-btn-catalogo');
+  if (!panel || !btnManual || !btnCat) return;
+
+  const active   = 'background:var(--dark);color:#fff;border-color:var(--dark);';
+  const inactive = 'background:transparent;color:var(--text2);border-color:var(--border);';
+
+  if (mode === 'catalogo') {
+    btnManual.style.cssText  += inactive;
+    btnCat.style.cssText     += active;
+    panel.style.display = 'block';
+    setTimeout(() => document.getElementById('np-catalog-q')?.focus(), 80);
+  } else {
+    btnManual.style.cssText  += active;
+    btnCat.style.cssText     += inactive;
+    panel.style.display = 'none';
+    setTimeout(() => document.getElementById('np-item-desc')?.focus(), 80);
+  }
+}
+
+function npCatalogoBuscarDebounced(q) {
+  clearTimeout(_npCatalogTimer);
+  _npCatalogTimer = setTimeout(() => npCatalogoBuscar(q), 300);
+}
+
+function npCatalogoBuscar(q) {
+  const resultsEl = document.getElementById('np-catalog-results');
+  if (!resultsEl) return;
+  const ql = q.trim().toLowerCase();
+  if (!ql) { resultsEl.style.display = 'none'; return; }
+
+  const res = (typeof Catalog !== 'undefined') ? Catalog.search(ql).slice(0, 20) : [];
+  resultsEl.style.display = 'block';
+
+  if (!res.length) {
+    resultsEl.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--muted);text-align:center;">Sin resultados</div>';
+    return;
+  }
+
+  resultsEl.innerHTML = res.map(p => `
+    <div onmousedown="npSeleccionarCatalogo(${p.id})"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border-light);
+             display:flex;align-items:center;gap:10px;"
+      onmouseenter="this.style.background='var(--orange-light)'"
+      onmouseleave="this.style.background=''">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escH(p.nombre)}</div>
+        <div style="font-size:11px;color:var(--muted);">
+          ${p.ref  ? `<span style="font-family:'DM Mono',monospace;">${escH(p.ref)}</span>` : ''}
+          ${p.marca ? ` · ${escH(p.marca)}` : ''}
+        </div>
+      </div>
+      <span style="font-size:12px;font-weight:700;color:var(--orange);white-space:nowrap;flex-shrink:0;">
+        ${typeof fCOP === 'function' ? fCOP(p.precio || 0) : ''}
+      </span>
+    </div>`).join('');
+}
+
+function npSeleccionarCatalogo(id) {
+  const p = (typeof Catalog !== 'undefined') ? Catalog.getById(id) : null;
+  if (!p) return;
+  const descEl = document.getElementById('np-item-desc');
+  const refEl  = document.getElementById('np-item-ref');
+  if (descEl) descEl.value = p.nombre;
+  if (refEl)  refEl.value  = p.ref || '';
+  // Volver a modo manual para que el usuario revise la cantidad y agregue
+  npItemMode('manual');
+  setTimeout(() => {
+    const cantEl = document.getElementById('np-item-cant');
+    cantEl?.select();
+  }, 120);
 }
 
 async function npAgregarFoto(e) {

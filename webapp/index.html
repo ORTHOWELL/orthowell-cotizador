@@ -352,6 +352,39 @@
       <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px;">Ítems solicitados *</div>
       <div id="np-items-list" style="margin-bottom:10px;max-height:160px;overflow-y:auto;padding-right:4px;"></div>
       <div style="background:var(--surface);border-radius:10px;padding:12px;border:1px dashed var(--border);">
+
+        <!-- Selector de modo: Manual / Del catálogo -->
+        <div style="display:flex;gap:6px;margin-bottom:12px;">
+          <button id="np-btn-manual" onclick="npItemMode('manual')"
+            style="padding:5px 14px;border:1.5px solid var(--dark);border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;background:var(--dark);color:#fff;">
+            ✏️ Manual
+          </button>
+          <button id="np-btn-catalogo" onclick="npItemMode('catalogo')"
+            style="padding:5px 14px;border:1.5px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:var(--text2);">
+            🔍 Del catálogo
+          </button>
+        </div>
+
+        <!-- Búsqueda en catálogo (oculto por defecto) -->
+        <div id="np-catalogo-panel" style="display:none;margin-bottom:10px;">
+          <div style="position:relative;">
+            <input type="text" id="np-catalog-q"
+              oninput="npCatalogoBuscarDebounced(this.value)"
+              onblur="setTimeout(()=>{const r=document.getElementById('np-catalog-results');if(r)r.style.display='none';},220)"
+              onfocus="if(this.value.trim())document.getElementById('np-catalog-results').style.display='block'"
+              placeholder="Buscar por nombre, referencia o marca…"
+              autocomplete="off"
+              style="width:100%;box-sizing:border-box;padding:8px 12px;border:1.5px solid var(--orange);border-radius:8px;font-size:13px;font-family:inherit;">
+            <div id="np-catalog-results"
+              style="display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:300;
+                     background:var(--white);border:1.5px solid var(--border);border-radius:10px;
+                     box-shadow:0 6px 24px rgba(0,0,0,.14);max-height:220px;overflow-y:auto;">
+            </div>
+          </div>
+          <p style="font-size:11px;color:var(--muted);margin:6px 0 0;">Toca un producto para completar los campos automáticamente.</p>
+        </div>
+
+        <!-- Campos del ítem (manual + pre-llenado desde catálogo) -->
         <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-bottom:8px;">
           <input type="text" id="np-item-desc" placeholder="Descripción del ítem *"
             style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;"
