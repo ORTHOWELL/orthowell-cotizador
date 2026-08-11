@@ -602,36 +602,13 @@ function consultaMostrarDetalle(p, itemEl, autoSelect = false) {
           </div>` : ''}
         </div>
       </div>
+
+      <!-- ── Datos principales (siempre visibles) ── -->
       <div class="consulta-grid">
         <div class="consulta-tile precio1">
           <div class="consulta-tile-label">💰 Precio 1 (Principal)</div>
           <div class="consulta-tile-value">${fCOP(p.precio||0)}</div>
           <div class="consulta-tile-sub">Precio de venta estándar</div>
-        </div>
-        ${!isAliado ? `<div class="consulta-tile">
-          <div class="consulta-tile-label">Precio 2</div>
-          <div class="consulta-tile-value">${fCOP(p.precio2||0)}</div>
-          <div class="consulta-tile-sub">Clientes especiales</div>
-        </div>` : ''}
-        <div class="consulta-tile">
-          <div class="consulta-tile-label">Precio 3</div>
-          <div class="consulta-tile-value">${fCOP(p.precio3||0)}</div>
-          <div class="consulta-tile-sub">Aliados / distribuidores</div>
-        </div>
-        ${!isAliado ? `<div class="consulta-tile costo">
-          <div class="consulta-tile-label">🏭 Costo</div>
-          <div class="consulta-tile-value">${fCOP(p.costo||0)}</div>
-          <div class="consulta-tile-sub">Costo de adquisición</div>
-        </div>` : ''}
-        ${!isAliado ? `<div class="consulta-tile ${margen !== null ? (parseFloat(margen) >= 0 ? 'margen-pos' : 'margen-neg') : ''}">
-          <div class="consulta-tile-label">📊 Margen</div>
-          <div class="consulta-tile-value">${margen !== null ? margen + '%' : '—'}</div>
-          <div class="consulta-tile-sub">${utilidad ? 'Utilidad: ' + utilidad : 'Sin costo registrado'}</div>
-        </div>` : ''}
-        <div class="consulta-tile iva">
-          <div class="consulta-tile-label">🧾 IVA ${p.iva||0}%</div>
-          <div class="consulta-tile-value">${p.iva > 0 ? fCOP(Math.round((p.precio||0) / (1 + (p.iva||0) / 100))) : fCOP(p.precio||0)}</div>
-          <div class="consulta-tile-sub">${p.iva > 0 ? 'Valor base (precio sin IVA)' : 'No aplica IVA'}</div>
         </div>
         <div class="consulta-tile" style="${(p.saldo||0) > 0 ? 'background:var(--success-bg);border-color:#a8e6c5;' : ''}">
           <div class="consulta-tile-label">📦 Saldo en bodega</div>
@@ -647,6 +624,46 @@ function consultaMostrarDetalle(p, itemEl, autoSelect = false) {
           <div class="consulta-tile-value" style="font-size:15px;font-family:'DM Mono',monospace;">${escH(p.ref||'—')}</div>
           <div class="consulta-tile-sub">Código del producto</div>
         </div>`}
+      </div>
+
+      <!-- ── Botón expandir ── -->
+      <button id="consulta-toggle-extra"
+        onclick="consultaToggleExtra(this)"
+        style="width:100%;margin-top:10px;padding:10px;border:1.5px dashed var(--border);border-radius:10px;
+               background:var(--bg2);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;
+               display:flex;align-items:center;justify-content:center;gap:6px;">
+        <span>Ver más detalles</span><span>▼</span>
+      </button>
+
+      <!-- ── Datos secundarios (ocultos por defecto) ── -->
+      <div id="consulta-extra" style="display:none;margin-top:8px;">
+        <div class="consulta-grid">
+          ${!isAliado ? `<div class="consulta-tile">
+            <div class="consulta-tile-label">Precio 2</div>
+            <div class="consulta-tile-value">${fCOP(p.precio2||0)}</div>
+            <div class="consulta-tile-sub">Clientes especiales</div>
+          </div>` : ''}
+          <div class="consulta-tile">
+            <div class="consulta-tile-label">Precio 3</div>
+            <div class="consulta-tile-value">${fCOP(p.precio3||0)}</div>
+            <div class="consulta-tile-sub">Aliados / distribuidores</div>
+          </div>
+          ${!isAliado ? `<div class="consulta-tile costo">
+            <div class="consulta-tile-label">🏭 Costo</div>
+            <div class="consulta-tile-value">${fCOP(p.costo||0)}</div>
+            <div class="consulta-tile-sub">Costo de adquisición</div>
+          </div>` : ''}
+          ${!isAliado ? `<div class="consulta-tile ${margen !== null ? (parseFloat(margen) >= 0 ? 'margen-pos' : 'margen-neg') : ''}">
+            <div class="consulta-tile-label">📊 Margen</div>
+            <div class="consulta-tile-value">${margen !== null ? margen + '%' : '—'}</div>
+            <div class="consulta-tile-sub">${utilidad ? 'Utilidad: ' + utilidad : 'Sin costo registrado'}</div>
+          </div>` : ''}
+          <div class="consulta-tile iva">
+            <div class="consulta-tile-label">🧾 IVA ${p.iva||0}%</div>
+            <div class="consulta-tile-value">${p.iva > 0 ? fCOP(Math.round((p.precio||0) / (1 + (p.iva||0) / 100))) : fCOP(p.precio||0)}</div>
+            <div class="consulta-tile-sub">${p.iva > 0 ? 'Valor base (precio sin IVA)' : 'No aplica IVA'}</div>
+          </div>
+        </div>
       </div>
     </div>`;
 
@@ -666,6 +683,15 @@ function consultaMostrarDetalle(p, itemEl, autoSelect = false) {
       abrirLightbox(thumb, p.driveFileId || null);
     };
   }
+}
+
+function consultaToggleExtra(btn) {
+  const extra = document.getElementById('consulta-extra');
+  if (!extra) return;
+  const open = extra.style.display !== 'none';
+  extra.style.display = open ? 'none' : 'block';
+  btn.querySelector('span:last-child').textContent = open ? '▼' : '▲';
+  btn.querySelector('span:first-child').textContent = open ? 'Ver más detalles' : 'Ocultar detalles';
 }
 
 function consultaAgregarCot(id) {
