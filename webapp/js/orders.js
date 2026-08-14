@@ -214,6 +214,10 @@ function renderOrdersList() {
   );
   if (filtroEstado) orders = orders.filter(o => o.estado === filtroEstado);
 
+  // Pendientes primero, luego en proceso, parcial, entregados, cancelados
+  const _ESTADO_SORT = { PENDIENTE: 0, EN_PROCESO: 1, ENTREGA_PARCIAL: 2, ENTREGADO: 3, CANCELADO: 4 };
+  orders.sort((a, b) => (_ESTADO_SORT[a.estado] ?? 5) - (_ESTADO_SORT[b.estado] ?? 5));
+
   const btnNueva = document.getElementById('btn-nueva-orden');
   if (btnNueva) btnNueva.style.display = rol === 'aliado' ? 'none' : '';
 
@@ -618,7 +622,17 @@ function pedidoGuardarItems() {
     order.items[idx].estadoItem = sel.value;
   });
   const usuario = Auth.getUser()?.email || '';
-  Orders.update(_currentOrderId, { items: order.items });
+
+  // Derivar estado general de la orden según los estados de los ítems
+  const allEntregado = order.items.length > 0 && order.items.every(i => i.estadoItem === 'ENTREGADO');
+  const someEntregado = order.items.some(i => i.estadoItem === 'ENTREGADO');
+  const anyActive = order.items.some(i => ['SOLICITADO', 'EN_TRANSITO', 'RECIBIDO_BODEGA'].includes(i.estadoItem));
+  const estadoDerivado = allEntregado ? 'ENTREGADO'
+    : someEntregado ? 'ENTREGA_PARCIAL'
+    : anyActive     ? 'EN_PROCESO'
+    : 'PENDIENTE';
+
+  Orders.update(_currentOrderId, { items: order.items, estado: estadoDerivado });
   Orders.addEvent(_currentOrderId, 'NOTA', 'Ítems actualizados', usuario);
   Sync.saveOrder(Orders.getById(_currentOrderId)).catch(e => console.warn('saveOrder:', e));
   renderOrderDetail(_currentOrderId);
