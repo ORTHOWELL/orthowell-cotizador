@@ -420,6 +420,7 @@ function _renderHistorialCots() {
       </div>
       <div class="hist-cot-actions">
         <button class="btn btn-primary btn-sm" onclick="cargarCotizacionGuardada('${c.id}')">📂 Abrir</button>
+        <button class="btn btn-sm" style="color:#059669;border:1.5px solid #059669;background:transparent;" onclick="convertirCotizacionAPedido('${c.id}')">📦 Crear pedido</button>
         ${(rol === 'admin' || c.creadoPor === userEmail)
           ? `<button class="btn btn-sm" style="color:var(--danger);border:1.5px solid var(--danger);background:transparent;" onclick="eliminarCotizacionGuardada('${c.id}')">🗑️ Eliminar</button>`
           : ''}

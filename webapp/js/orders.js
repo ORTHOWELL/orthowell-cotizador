@@ -716,6 +716,63 @@ function confirmarEntrega() {
   toast('✓ Entrega registrada — ' + pct + '% completado', 'success');
 }
 
+// ── CONVERTIR COTIZACIÓN A PEDIDO ────────────────────────────────────
+function convertirCotizacionAPedido(id) {
+  let cot = null;
+  try {
+    const cots = JSON.parse(localStorage.getItem('ow_cots_v1') || '[]');
+    cot = cots.find(c => c.id === id);
+  } catch(e) {}
+  if (!cot) { toast('Cotización no encontrada', 'error'); return; }
+
+  // Cerrar historial y abrir modal de nueva orden
+  document.getElementById('modal-historial-cots')?.classList.remove('open');
+
+  _newOrderItems   = [];
+  _newOrderArchivos = [];
+
+  // Vaciar todos los campos del formulario
+  ['np-cliente-nombre','np-cliente-nit','np-cliente-empresa','np-cliente-tel','np-cliente-email',
+   'np-cliente-dir','np-fecha-entrega','np-notas','np-item-desc','np-item-ref','np-item-proveedor','np-catalog-q']
+    .forEach(elId => { const el = document.getElementById(elId); if (el) el.value = ''; });
+  const cantEl = document.getElementById('np-item-cant'); if (cantEl) cantEl.value = '1';
+
+  // Pre-llenar con datos de la cotización
+  const set = (elId, val) => { const el = document.getElementById(elId); if (el && val) el.value = val; };
+  set('np-cliente-nombre', cot.cliente);
+  set('np-cliente-nit',    cot.nitCliente);
+
+  // Construir nota con información de la cotización
+  const notaParts = [
+    cot.notasExtra,
+    cot.condiciones  ? 'Condición de pago: ' + cot.condiciones : '',
+    cot.contacto     ? 'Contacto: '           + cot.contacto    : '',
+    cot.ciudad       ? 'Ciudad: '             + cot.ciudad      : '',
+    'Ref. cotización: ' + (cot.numero || cot.id),
+  ].filter(Boolean);
+  set('np-notas', notaParts.join('\n'));
+
+  // Convertir ítems de cotización a ítems de orden
+  _newOrderItems = (cot.items || []).map(i => ({
+    desc:          i.nombre  || '',
+    ref:           i.ref     || '',
+    cant:          i.cant    || 1,
+    proveedor:     '',
+    notas:         i.obs     || '',
+    cantEntregada: 0,
+    estadoItem:    'PENDIENTE',
+  }));
+
+  const catalogResults = document.getElementById('np-catalog-results');
+  if (catalogResults) catalogResults.style.display = 'none';
+  npItemMode('manual');
+
+  _renderNpItems();
+  document.getElementById('modal-nuevo-pedido').classList.add('open');
+  setTimeout(() => document.getElementById('np-cliente-nombre')?.focus(), 150);
+  toast(`📋 Cotización ${cot.numero || ''} importada — revisa y crea la orden`, 'success');
+}
+
 // ── NUEVA ORDEN ──────────────────────────────────────────────────────
 function abrirNuevoPedido() {
   _newOrderItems   = [];
