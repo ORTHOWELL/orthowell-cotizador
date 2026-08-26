@@ -183,7 +183,7 @@ function renderItems() {
     // Descripción + ref + observaciones en una sola celda
     const inpName = document.createElement('textarea');
     inpName.value = item.nombre; inpName.rows = 2;
-    inpName.style.cssText = 'width:100%;min-width:140px;resize:vertical;min-height:40px;font-size:12.5px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-family:inherit;line-height:1.4;';
+    inpName.style.cssText = 'width:100%;min-width:0;resize:vertical;min-height:40px;font-size:12.5px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-family:inherit;line-height:1.4;';
     inpName.onchange = function() { window._cotItems[idx].nombre = this.value; updateSummary(); };
     const tdName = document.createElement('td');
     tdName.setAttribute('data-label', 'Descripción');
