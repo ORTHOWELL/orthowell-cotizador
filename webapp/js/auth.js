@@ -236,11 +236,11 @@ const Auth = (() => {
       if (banner) banner.remove();
     };
 
-    // prompt:'' = renovar silenciosamente si es posible; si Google necesita UI la muestra
-    // brevemente (< 1 s) y luego cierra automáticamente para cuentas ya autorizadas.
-    // login_hint le dice a Google exactamente qué cuenta usar, mejorando el éxito silencioso.
+    // prompt:'none' = renovación completamente silenciosa, nunca abre ventana.
+    // Si falla (Workspace con política estricta), _onRenewalFailed() muestra el banner
+    // y el usuario renueva manualmente con un clic — sin popups inesperados.
     _tokenClient.requestAccessToken({
-      prompt: '',
+      prompt: 'none',
       login_hint: _userInfo?.email || '',
     });
   }

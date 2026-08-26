@@ -490,6 +490,7 @@ function _renderItemsTable(items, editable, notasOrder) {
         <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;width:68px;">Cant.</th>
         <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;min-width:120px;">Estado ítem</th>
         <th style="padding:7px 8px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;min-width:140px;">Observaciones</th>
+        <th style="padding:7px 8px;width:32px;"></th>
       </tr>
     </thead>
     <tbody>
@@ -516,6 +517,12 @@ function _renderItemsTable(items, editable, notasOrder) {
           <td style="padding:5px 8px;">
             <input type="text" value="${escH(item.notas||'')}" data-idx="${i}" data-field="notas"
               class="item-edit-inp" placeholder="Observaciones…" style="${inpS}min-width:130px;">
+          </td>
+          <td style="padding:5px 4px;text-align:center;">
+            <button onclick="this.closest('tr').remove()"
+              title="Eliminar ítem"
+              style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:0 4px;line-height:1;opacity:.7;"
+              onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='.7'">✕</button>
           </td>
         </tr>`).join('')}
     </tbody>
@@ -621,6 +628,13 @@ function pedidoGuardarItems() {
     const idx = parseInt(sel.dataset.idx);
     order.items[idx].estadoItem = sel.value;
   });
+
+  // Filtrar ítems cuya fila fue eliminada del DOM (botón ✕)
+  const remainingIdxs = new Set(
+    [...document.querySelectorAll('.item-edit-inp')].map(inp => parseInt(inp.dataset.idx))
+  );
+  order.items = order.items.filter((_, i) => remainingIdxs.has(i));
+
   const usuario = Auth.getUser()?.email || '';
 
   // Derivar estado general de la orden según los estados de los ítems
