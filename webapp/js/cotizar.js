@@ -673,12 +673,24 @@ function consultaMostrarDetalle(p, itemEl, autoSelect = false) {
     const imgWrap = document.getElementById('consulta-img-wrap');
     const im = document.createElement('img');
     im.alt = '';
-    im.style.cssText = 'width:100%;height:100%;object-fit:contain;border-radius:8px;display:block;';
+    im.style.cssText = 'width:100%;height:100%;object-fit:contain;border-radius:8px;display:block;transition:opacity .35s;';
     Catalog.loadImage(im, p.imageUrl, p.driveFileId, imgWrap);
     imgWrap.appendChild(im);
+
+    // Mejorar calidad en background: si el thumbnail es base64 (comprimido para Sheets)
+    // y hay imagen completa en Drive, cargarla progresivamente sin bloquear la UI.
+    if (p.driveFileId && p.imageUrl && p.imageUrl.startsWith('data:')) {
+      Catalog.fetchFullImage(p.driveFileId)
+        .then(fullSrc => {
+          if (!im.isConnected) return; // usuario ya cambió de producto
+          im.style.opacity = '0.5';
+          im.src = fullSrc;
+          im.onload = () => { im.style.opacity = '1'; };
+        })
+        .catch(() => {}); // si falla, el thumbnail comprimido sigue visible
+    }
+
     imgWrap.onclick = () => {
-      // Si Drive API ya cargó una imagen de mejor calidad en im.src (blob URL o data URL
-      // diferente al thumbnail guardado), usar esa directamente en el lightbox.
       const liveSrc = (im.complete && im.naturalWidth > 0) ? im.src : '';
       const thumb = (liveSrc && liveSrc !== p.imageUrl) ? liveSrc : (p.imageUrl || liveSrc || '');
       abrirLightbox(thumb, p.driveFileId || null);
