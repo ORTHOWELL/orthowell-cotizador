@@ -668,14 +668,9 @@
       <div style="background:var(--surface);border-radius:10px;padding:16px;border:1px solid var(--border-light);">
         <div style="font-weight:700;font-size:13px;margin-bottom:4px;">🔍 Opción C — Búsqueda automática por nombre</div>
         <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
-          Busca imágenes en Wikimedia Commons y las sube a Drive en alta calidad (800px).
-          Activa "Reemplazar existentes" para mejorar productos que ya tienen imagen pero sin respaldo en Drive.
+          Busca imágenes automáticamente para productos sin foto usando Wikimedia Commons.
+          Solo afecta productos <strong>sin imagen</strong>.
         </div>
-        <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer;font-size:12px;color:var(--text2);">
-          <input type="checkbox" id="masiva-reemplazar" style="width:15px;height:15px;accent-color:var(--orange);">
-          Reemplazar imágenes existentes sin respaldo en Drive
-          <span style="font-size:10px;color:var(--muted);">(las fotos propias podrían cambiar)</span>
-        </label>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           <button class="btn btn-outline btn-sm" onclick="Catalog.iniciarBusquedaMasiva()">▶ Iniciar búsqueda automática</button>
           <button class="btn btn-outline btn-sm" onclick="detenerBusquedaMasiva()" id="btn-stop-masiva" style="display:none;border-color:var(--danger);color:var(--danger);">⏹ Detener</button>
