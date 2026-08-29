@@ -778,8 +778,18 @@ const Catalog = (() => {
   // ── BÚSQUEDA MASIVA AUTOMÁTICA ────────────────────────────────────
   async function iniciarBusquedaMasiva() {
     window._masivaStopped = false;
-    const sinFoto = _catalog.filter(p => !p.imageUrl);
-    if (!sinFoto.length) { toast('Todos los productos ya tienen imagen', 'success'); return; }
+    const reemplazar = document.getElementById('masiva-reemplazar')?.checked || false;
+    // Sin reemplazar: solo productos sin imagen
+    // Con reemplazar: también productos con imagen pero sin Drive (driveFileId vacío)
+    const sinFoto = _catalog.filter(p =>
+      !p.imageUrl || (reemplazar && !p.driveFileId)
+    );
+    if (!sinFoto.length) {
+      toast(reemplazar
+        ? 'Todos los productos ya tienen imagen en Drive ✓'
+        : 'Todos los productos ya tienen imagen', 'success');
+      return;
+    }
     document.getElementById('btn-stop-masiva').style.display = 'inline-flex';
     document.getElementById('masiva-progress').style.display = 'block';
     const bar = document.getElementById('masiva-bar');
