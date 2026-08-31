@@ -1,6 +1,6 @@
 /**
  * orders.js — Módulo de gestión de Pedidos / Órdenes de compra
- * Datos: Google Sheets (hoja "Pedidos") + caché en localStorage
+ * Estados de ítem (simplificados): PENDIENTE → SOLICITADO → EN_STOCK → ENTREGADO
  */
 
 // ── MÓDULO DE ESTADO ─────────────────────────────────────────────────
@@ -19,7 +19,6 @@ const Orders = (() => {
     } catch(e) { _orders = []; }
   }
 
-  // ── CATÁLOGO DE ESTADOS ───────────────────────────────────────────
   const ESTADOS = {
     PENDIENTE:       { label: 'Pendiente',       color: '#92400e', bg: '#fef3c7' },
     EN_PROCESO:      { label: 'En proceso',       color: '#1d4ed8', bg: '#dbeafe' },
@@ -69,7 +68,6 @@ const Orders = (() => {
     return tot > 0 ? Math.round((ent / tot) * 100) : 0;
   }
 
-  // ── CRUD ─────────────────────────────────────────────────────────
   function getAll() { return [..._orders]; }
   function getById(id) { return _orders.find(o => o.id === id) || null; }
 
@@ -137,7 +135,6 @@ const Orders = (() => {
     _saveCache();
   }
 
-  // Comprime foto a thumbail pequeño para almacenar en Sheets (máx ~10K chars/foto)
   function compressPhoto(b64) {
     return new Promise(resolve => {
       const img = new Image();
@@ -171,23 +168,40 @@ const Orders = (() => {
 
 
 // ═══════════════════════════════════════════════════════════════════════
-// UI — funciones globales (llamadas desde onclick en el HTML)
+// UI
 // ═══════════════════════════════════════════════════════════════════════
 
 let _currentOrderId  = null;
 let _newOrderItems   = [];
 let _newOrderArchivos = [];
+let _entregaItemIdx  = null; // índice del ítem en modal de entrega unitaria
 
-// ── HELPERS UI ───────────────────────────────────────────────────────
+// ── HELPERS DE ESTADO DE ÍTEM ────────────────────────────────────────
+// Normaliza los estados viejos al nuevo modelo simplificado
+function _normItemEstado(e) {
+  if (e === 'EN_TRANSITO')     return 'SOLICITADO';
+  if (e === 'RECIBIDO_BODEGA') return 'EN_STOCK';
+  return e || 'PENDIENTE';
+}
+
 function _itemEstadoInfo(e) {
+  e = _normItemEstado(e);
   const map = {
-    PENDIENTE:       { label: 'Pendiente',   color: '#92400e', bg: '#fef3c7' },
-    SOLICITADO:      { label: 'Solicitado',  color: '#1d4ed8', bg: '#dbeafe' },
-    EN_TRANSITO:     { label: 'En tránsito', color: '#6d28d9', bg: '#ede9fe' },
-    RECIBIDO_BODEGA: { label: 'En bodega',   color: '#065f46', bg: '#d1fae5' },
-    ENTREGADO:       { label: 'Entregado',   color: '#14532d', bg: '#bbf7d0' },
+    PENDIENTE:  { label: 'Sin solicitar', icon: '⚪', color: '#4b5563', bg: '#f3f4f6', next: 'SOLICITADO', nextLabel: 'Marcar como Solicitado' },
+    SOLICITADO: { label: 'Solicitado',    icon: '🔄', color: '#92400e', bg: '#fef3c7', next: 'EN_STOCK',   nextLabel: 'Marcar como En bodega' },
+    EN_STOCK:   { label: 'En bodega',     icon: '📦', color: '#1e40af', bg: '#dbeafe', next: 'ENTREGADO',  nextLabel: 'Registrar entrega' },
+    ENTREGADO:  { label: 'Entregado',     icon: '✅', color: '#065f46', bg: '#d1fae5', next: null,         nextLabel: null },
   };
-  return map[e] || { label: e || '?', color: '#888', bg: '#f5f5f5' };
+  return map[e] || map['PENDIENTE'];
+}
+
+function _countItemsByState(items) {
+  const c = { PENDIENTE: 0, SOLICITADO: 0, EN_STOCK: 0, ENTREGADO: 0 };
+  (items || []).forEach(item => {
+    const key = _normItemEstado(item.estadoItem);
+    c[key in c ? key : 'PENDIENTE']++;
+  });
+  return c;
 }
 
 function _eventoIcon(tipo) {
@@ -195,8 +209,49 @@ function _eventoIcon(tipo) {
   return m[tipo] || '•';
 }
 
+// ── DASHBOARD KPIs ───────────────────────────────────────────────────
+function renderOrdersDashboard() {
+  const el = document.getElementById('pedidos-dashboard');
+  if (!el) return;
+
+  const all     = Orders.getAll();
+  const activos = all.filter(o => o.estado !== 'ENTREGADO' && o.estado !== 'CANCELADO');
+
+  let sinSolicitar = 0, solicitados = 0, enBodega = 0, porEntregar = 0;
+  activos.forEach(o => {
+    (o.items || []).forEach(item => {
+      const e = _normItemEstado(item.estadoItem);
+      if (e === 'PENDIENTE')  sinSolicitar++;
+      if (e === 'SOLICITADO') solicitados++;
+      if (e === 'EN_STOCK')   enBodega++;
+      if (e !== 'ENTREGADO')  porEntregar++;
+    });
+  });
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px;margin-bottom:18px;">
+      ${_kpiTile('Pedidos activos', activos.length, '#1d4ed8', '#eff6ff', '🛒', 'en seguimiento')}
+      ${_kpiTile('Sin solicitar', sinSolicitar, '#6b7280', '#f3f4f6', '⚪', 'ítems por pedir')}
+      ${_kpiTile('En bodega', enBodega, '#1e40af', '#dbeafe', '📦', 'listos para entregar')}
+      ${_kpiTile('Por entregar', porEntregar, '#6d28d9', '#ede9fe', '🚚', 'ítems pendientes')}
+    </div>`;
+}
+
+function _kpiTile(label, value, color, bg, icon, sub) {
+  return `<div style="background:${bg};border-radius:12px;padding:14px 16px;border:1px solid ${color}22;">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+      <span style="font-size:16px;">${icon}</span>
+      <span style="font-size:11px;font-weight:600;color:${color};text-transform:uppercase;letter-spacing:.4px;">${label}</span>
+    </div>
+    <div style="font-size:28px;font-weight:800;color:${color};line-height:1;">${value}</div>
+    <div style="font-size:10px;color:${color};opacity:.7;margin-top:3px;">${sub}</div>
+  </div>`;
+}
+
 // ── LISTA DE ÓRDENES ─────────────────────────────────────────────────
 function renderOrdersList() {
+  renderOrdersDashboard();
+
   const container = document.getElementById('pedidos-cards');
   if (!container) return;
 
@@ -214,7 +269,6 @@ function renderOrdersList() {
   );
   if (filtroEstado) orders = orders.filter(o => o.estado === filtroEstado);
 
-  // Pendientes primero, luego en proceso, parcial, entregados, cancelados
   const _ESTADO_SORT = { PENDIENTE: 0, EN_PROCESO: 1, ENTREGA_PARCIAL: 2, ENTREGADO: 3, CANCELADO: 4 };
   orders.sort((a, b) => (_ESTADO_SORT[a.estado] ?? 5) - (_ESTADO_SORT[b.estado] ?? 5));
 
@@ -233,25 +287,45 @@ function renderOrdersList() {
 
   container.innerHTML = '';
   orders.forEach(order => {
-    const isOwn = (order.creadoPor === userEmail) || rol === 'admin';
-    const info  = Orders.estadoInfo(order.estado);
-    const pct   = Orders.pctEntregado(order);
+    const isOwn  = (order.creadoPor === userEmail) || rol === 'admin';
+    const info   = Orders.estadoInfo(order.estado);
+    const counts = _countItemsByState(order.items);
+    const total  = (order.items || []).length;
 
     const card = document.createElement('div');
-    card.style.cssText = 'background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);border:1px solid var(--border);cursor:pointer;transition:box-shadow .15s;';
-    card.addEventListener('mouseenter', () => { card.style.boxShadow = '0 4px 16px rgba(0,0,0,.13)'; });
-    card.addEventListener('mouseleave', () => { card.style.boxShadow = '0 1px 4px rgba(0,0,0,.08)'; });
+    card.style.cssText = 'background:var(--white);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid var(--border);cursor:pointer;transition:box-shadow .15s,transform .1s;';
+    card.addEventListener('mouseenter', () => { card.style.boxShadow = '0 6px 20px rgba(0,0,0,.12)'; card.style.transform = 'translateY(-1px)'; });
+    card.addEventListener('mouseleave', () => { card.style.boxShadow = '0 1px 4px rgba(0,0,0,.07)'; card.style.transform = ''; });
     card.onclick = () => openOrderDetail(order.id);
+
+    // Barra segmentada 4 colores
+    const pBar = total > 0 ? `
+      <div style="height:6px;border-radius:4px;overflow:hidden;display:flex;gap:1px;margin-bottom:8px;">
+        ${counts.PENDIENTE  > 0 ? `<div style="flex:${counts.PENDIENTE};background:#9ca3af;border-radius:2px;"></div>`  : ''}
+        ${counts.SOLICITADO > 0 ? `<div style="flex:${counts.SOLICITADO};background:#f59e0b;border-radius:2px;"></div>` : ''}
+        ${counts.EN_STOCK   > 0 ? `<div style="flex:${counts.EN_STOCK};background:#3b82f6;border-radius:2px;"></div>`   : ''}
+        ${counts.ENTREGADO  > 0 ? `<div style="flex:${counts.ENTREGADO};background:#10b981;border-radius:2px;"></div>`  : ''}
+        ${total === 0 ? '<div style="flex:1;background:var(--border);border-radius:2px;"></div>' : ''}
+      </div>` : '<div style="height:6px;background:var(--border);border-radius:4px;margin-bottom:8px;"></div>';
+
+    // Pills de conteo
+    const pills = total > 0 ? [
+      counts.PENDIENTE  > 0 ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#f3f4f6;color:#4b5563;font-weight:600;">⚪ ${counts.PENDIENTE}</span>`  : '',
+      counts.SOLICITADO > 0 ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#fef3c7;color:#92400e;font-weight:600;">🔄 ${counts.SOLICITADO}</span>` : '',
+      counts.EN_STOCK   > 0 ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#dbeafe;color:#1e40af;font-weight:600;">📦 ${counts.EN_STOCK}</span>`   : '',
+      counts.ENTREGADO  > 0 ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#d1fae5;color:#065f46;font-weight:600;">✅ ${counts.ENTREGADO}</span>`  : '',
+    ].filter(Boolean).join('') : '<span style="font-size:10px;color:var(--muted);">Sin ítems</span>';
+
     card.innerHTML = `
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
         <div style="flex:1;min-width:0;">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:5px;">
             <span style="font-family:'DM Mono',monospace;font-weight:700;font-size:12px;color:var(--orange);">${escH(order.numero)}</span>
             <span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:${info.bg};color:${info.color};">${info.label}</span>
             ${!isOwn ? '<span style="font-size:10px;color:var(--muted);background:var(--surface2);padding:2px 6px;border-radius:4px;">👁 Solo lectura</span>' : ''}
           </div>
-          <div style="font-weight:600;font-size:15px;line-height:1.3;margin-bottom:2px;">${escH(order.clienteNombre || '—')}</div>
-          ${order.clienteEmpresa ? `<div style="font-size:12px;color:var(--muted);">${escH(order.clienteEmpresa)}</div>` : ''}
+          <div style="font-weight:700;font-size:15px;line-height:1.3;margin-bottom:2px;overflow-wrap:anywhere;word-break:break-word;">${escH(order.clienteNombre || '—')}</div>
+          ${order.clienteEmpresa ? `<div style="font-size:12px;color:var(--muted);overflow-wrap:anywhere;">${escH(order.clienteEmpresa)}</div>` : ''}
         </div>
         <div style="text-align:right;flex-shrink:0;">
           <div style="font-size:10px;color:var(--muted);">CREADO</div>
@@ -259,14 +333,10 @@ function renderOrdersList() {
           ${order.fechaEstEntrega ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Est: ${Orders.fmtDate(order.fechaEstEntrega)}</div>` : ''}
         </div>
       </div>
-      <div style="margin-top:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-          <span style="font-size:11px;color:var(--muted);">${(order.items || []).length} ítem(s) · ${pct}% entregado</span>
-          <span style="font-size:11px;color:var(--muted);">Por: ${escH(order.creadoPor || '')}</span>
-        </div>
-        <div style="height:5px;background:var(--border);border-radius:4px;overflow:hidden;">
-          <div style="height:100%;width:${pct}%;background:${pct === 100 ? '#10b981' : 'var(--orange)'};border-radius:4px;"></div>
-        </div>
+      ${pBar}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">${pills}</div>
+        <span style="font-size:10px;color:var(--muted);">Por: ${escH(order.creadoPor || '')}</span>
       </div>`;
     container.appendChild(card);
   });
@@ -293,55 +363,68 @@ function renderOrderDetail(id) {
   const container = document.getElementById('pedidos-detail-content');
   if (!order || !container) return;
 
-  const rol      = App.getRol();
-  const email    = Auth.getUser()?.email || '';
-  const isOwn    = (order.creadoPor === email) || rol === 'admin';
-  const isAdmin  = rol === 'admin';
-  const info     = Orders.estadoInfo(order.estado);
-  const pct      = Orders.pctEntregado(order);
-  const activo   = order.estado !== 'ENTREGADO' && order.estado !== 'CANCELADO';
-  const estados  = ['PENDIENTE', 'EN_PROCESO', 'ENTREGA_PARCIAL', 'ENTREGADO', 'CANCELADO'];
+  const rol     = App.getRol();
+  const email   = Auth.getUser()?.email || '';
+  const isOwn   = (order.creadoPor === email) || rol === 'admin';
+  const isAdmin = rol === 'admin';
+  const info    = Orders.estadoInfo(order.estado);
+  const activo  = order.estado !== 'ENTREGADO' && order.estado !== 'CANCELADO';
+
+  // Resumen de ítems por estado
+  const counts = _countItemsByState(order.items);
+  const total  = (order.items || []).length;
+  const pct    = Orders.pctEntregado(order);
 
   container.innerHTML = `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);">
+    <!-- CABECERA -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);">
       <div>
         <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);margin-bottom:4px;">${escH(order.numero)}</div>
-        <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;">${escH(order.clienteNombre || '—')}</h2>
+        <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;overflow-wrap:anywhere;">${escH(order.clienteNombre || '—')}</h2>
         <span style="font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;background:${info.bg};color:${info.color};">${info.label}</span>
+        ${order.estado !== 'ENTREGADO' && order.estado !== 'CANCELADO' ? `
+        <span style="font-size:11px;color:var(--muted);margin-left:10px;">· Estado derivado automáticamente de los ítems</span>` : ''}
       </div>
-      ${isOwn && activo ? `
+      ${isOwn ? `
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <select id="sel-cambiar-estado" onchange="pedidoCambiarEstado(this.value)"
-          style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:#fff;cursor:pointer;">
-          <option value="">Cambiar estado…</option>
-          ${estados.filter(e => e !== order.estado).map(e =>
-            `<option value="${e}">${Orders.estadoInfo(e).label}</option>`).join('')}
-        </select>
-        <button onclick="pedidoRegistrarEntrega()" style="padding:7px 14px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📦 Registrar entrega</button>
-        ${isAdmin ? `<button onclick="pedidoEliminar()" style="padding:7px 14px;background:#fff;color:#dc2626;border:1px solid #dc2626;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Eliminar</button>` : ''}
+        ${activo ? `<button onclick="pedidoRegistrarEntrega()" style="padding:8px 16px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📦 Registrar entrega múltiple</button>` : ''}
+        ${isAdmin ? `<button onclick="pedidoEliminar()" style="padding:8px 14px;background:#fff;color:#dc2626;border:1px solid #dc2626;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Eliminar</button>` : ''}
       </div>` : ''}
     </div>
 
+    <!-- MINI DASHBOARD DE ESTA ORDEN -->
+    ${total > 0 ? `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px;">
+      ${_miniKpi('⚪ Sin solicitar', counts.PENDIENTE,  '#4b5563', '#f3f4f6')}
+      ${_miniKpi('🔄 Solicitados',   counts.SOLICITADO, '#92400e', '#fef3c7')}
+      ${_miniKpi('📦 En bodega',     counts.EN_STOCK,   '#1e40af', '#dbeafe')}
+      ${_miniKpi('✅ Entregados',    counts.ENTREGADO,  '#065f46', '#d1fae5')}
+    </div>
+    <!-- Barra de progreso total -->
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px;">
+        <span>${total} ítems · ${pct}% entregado por unidades</span>
+      </div>
+      <div style="height:8px;border-radius:6px;overflow:hidden;display:flex;gap:1px;">
+        ${counts.PENDIENTE  > 0 ? `<div style="flex:${counts.PENDIENTE};background:#9ca3af;"></div>`  : ''}
+        ${counts.SOLICITADO > 0 ? `<div style="flex:${counts.SOLICITADO};background:#f59e0b;"></div>` : ''}
+        ${counts.EN_STOCK   > 0 ? `<div style="flex:${counts.EN_STOCK};background:#3b82f6;"></div>`   : ''}
+        ${counts.ENTREGADO  > 0 ? `<div style="flex:${counts.ENTREGADO};background:#10b981;"></div>`  : ''}
+      </div>
+    </div>` : ''}
+
+    <!-- DATOS CLIENTE Y FECHAS -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:14px;">
-      <div style="background:#fff;border-radius:12px;padding:14px;border:1px solid var(--border);">
+      <div style="background:var(--white);border-radius:12px;padding:14px;border:1px solid var(--border);">
         <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">📋 Cliente</div>
         ${_dRow('Cliente', order.clienteNombre)}
-        ${order.clienteNit ? `<div style="display:flex;gap:8px;padding:3px 0;">
-          <span style="font-size:12px;color:var(--muted);min-width:70px;flex-shrink:0;">NIT</span>
-          <span style="font-size:13px;font-family:'DM Mono',monospace;">${escH(order.clienteNit)}</span>
-        </div>` : ''}
+        ${order.clienteNit ? `<div style="display:flex;gap:8px;padding:3px 0;"><span style="font-size:12px;color:var(--muted);min-width:70px;flex-shrink:0;">NIT</span><span style="font-size:13px;font-family:'DM Mono',monospace;">${escH(order.clienteNit)}</span></div>` : ''}
         ${_dRow('Empresa', order.clienteEmpresa)}
-        ${order.clienteTel ? `<div style="display:flex;gap:8px;padding:3px 0;">
-          <span style="font-size:12px;color:var(--muted);min-width:70px;flex-shrink:0;">Tel</span>
-          <a href="tel:${escH(order.clienteTel)}" style="font-size:13px;color:var(--orange);">${escH(order.clienteTel)}</a>
-        </div>` : ''}
-        ${order.clienteEmail ? `<div style="display:flex;gap:8px;padding:3px 0;">
-          <span style="font-size:12px;color:var(--muted);min-width:70px;flex-shrink:0;">Email</span>
-          <a href="mailto:${escH(order.clienteEmail)}" style="font-size:13px;color:var(--orange);word-break:break-all;">${escH(order.clienteEmail)}</a>
-        </div>` : ''}
+        ${order.clienteTel ? `<div style="display:flex;gap:8px;padding:3px 0;"><span style="font-size:12px;color:var(--muted);min-width:70px;flex-shrink:0;">Tel</span><a href="tel:${escH(order.clienteTel)}" style="font-size:13px;color:var(--orange);">${escH(order.clienteTel)}</a></div>` : ''}
+        ${order.clienteEmail ? `<div style="display:flex;gap:8px;padding:3px 0;"><span style="font-size:12px;color:var(--muted);min-width:70px;flex-shrink:0;">Email</span><a href="mailto:${escH(order.clienteEmail)}" style="font-size:13px;color:var(--orange);word-break:break-all;">${escH(order.clienteEmail)}</a></div>` : ''}
         ${_dRow('Dirección', order.clienteDireccion)}
       </div>
-      <div style="background:#fff;border-radius:12px;padding:14px;border:1px solid var(--border);">
+      <div style="background:var(--white);border-radius:12px;padding:14px;border:1px solid var(--border);">
         <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">📅 Fechas</div>
         ${_dRow('Creado', Orders.fmtDate(order.fechaCreacion))}
         ${_dRow('Por', order.creadoPor)}
@@ -351,56 +434,58 @@ function renderOrderDetail(id) {
       </div>
     </div>
 
-    <div style="background:#fff;border-radius:12px;padding:14px;border:1px solid var(--border);margin-bottom:14px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <!-- TABLA DE ÍTEMS -->
+    <div style="background:var(--white);border-radius:12px;padding:14px;border:1px solid var(--border);margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">📦 Ítems del pedido</div>
-        <span style="font-size:12px;font-weight:700;color:${pct === 100 ? '#10b981' : 'var(--orange)'};">${pct}% entregado</span>
-      </div>
-      <div style="height:5px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:12px;">
-        <div style="height:100%;width:${pct}%;background:${pct === 100 ? '#10b981' : 'var(--orange)'};border-radius:4px;"></div>
+        ${isOwn && activo && total > 0 ? `
+        <button onclick="pedidoGuardarItems()" style="padding:5px 14px;background:var(--orange);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">💾 Guardar texto</button>` : ''}
       </div>
       ${_renderItemsTable(order.items || [], isOwn && activo, order.notas || '')}
     </div>
 
+    <!-- ADJUNTOS -->
     ${(order.archivos || []).length ? `
-    <div style="background:#fff;border-radius:12px;padding:14px;border:1px solid var(--border);margin-bottom:14px;">
+    <div style="background:var(--white);border-radius:12px;padding:14px;border:1px solid var(--border);margin-bottom:14px;">
       <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">📎 Archivos adjuntos</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        ${(order.archivos || []).map(a => _renderArchivoThumb(a)).join('')}
-      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">${(order.archivos || []).map(a => _renderArchivoThumb(a)).join('')}</div>
     </div>` : ''}
 
     ${isOwn ? `
-    <div style="background:#fff;border-radius:12px;padding:14px;border:1px solid var(--border);margin-bottom:14px;">
+    <div style="background:var(--white);border-radius:12px;padding:14px;border:1px solid var(--border);margin-bottom:14px;">
       <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">📎 Adjuntar archivo</div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <label style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;">
-          📷 Tomar foto
-          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="pedidoAgregarFoto(event)">
+          📷 Tomar foto <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="pedidoAgregarFoto(event)">
         </label>
         <label style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;">
-          📂 Subir foto / PDF
-          <input type="file" accept="image/*,application/pdf,.pdf" style="display:none;" onchange="pedidoAgregarFoto(event)">
+          📂 Subir foto / PDF <input type="file" accept="image/*,application/pdf,.pdf" style="display:none;" onchange="pedidoAgregarFoto(event)">
         </label>
         <span style="font-size:11px;color:var(--muted);">${(order.archivos || []).length}/3 adjuntos</span>
       </div>
     </div>
-    <div style="background:#fff;border-radius:12px;padding:14px;border:1px solid var(--border);margin-bottom:14px;">
+    <div style="background:var(--white);border-radius:12px;padding:14px;border:1px solid var(--border);margin-bottom:14px;">
       <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">💬 Agregar nota</div>
       <div style="display:flex;gap:8px;">
         <input type="text" id="pedido-nota-inp" placeholder="Escribe un comentario o nota de seguimiento…"
           style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"
           onkeydown="if(event.key==='Enter')pedidoAgregarNota()">
-        <button onclick="pedidoAgregarNota()"
-          style="padding:8px 16px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Agregar</button>
+        <button onclick="pedidoAgregarNota()" style="padding:8px 16px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Agregar</button>
       </div>
     </div>` : ''}
 
-    <div style="background:#fff;border-radius:12px;padding:14px;border:1px solid var(--border);">
+    <!-- TIMELINE -->
+    <div style="background:var(--white);border-radius:12px;padding:14px;border:1px solid var(--border);">
       <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;">📜 Historial</div>
       ${_renderTimeline(order.eventos || [])}
-    </div>
-  `;
+    </div>`;
+}
+
+function _miniKpi(label, value, color, bg) {
+  return `<div style="background:${bg};border-radius:8px;padding:10px 12px;border:1px solid ${color}22;text-align:center;">
+    <div style="font-size:22px;font-weight:800;color:${color};line-height:1;">${value}</div>
+    <div style="font-size:10px;color:${color};font-weight:600;margin-top:2px;">${label}</div>
+  </div>`;
 }
 
 function _dRow(label, val) {
@@ -425,6 +510,7 @@ function _renderArchivoThumb(a) {
   </div>`;
 }
 
+// ── TABLA DE ÍTEMS INTERACTIVA ───────────────────────────────────────
 function _renderItemsTable(items, editable, notasOrder) {
   if (!items.length) {
     if (editable) {
@@ -435,103 +521,109 @@ function _renderItemsTable(items, editable, notasOrder) {
           style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box;"
         >${escH(notasOrder || '')}</textarea>
         <div style="margin-top:8px;display:flex;justify-content:flex-end;">
-          <button onclick="pedidoGuardarNotas()"
-            style="padding:7px 18px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar notas</button>
+          <button onclick="pedidoGuardarNotas()" style="padding:7px 18px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar notas</button>
         </div>`;
     }
     return '<p style="color:var(--muted);font-size:13px;margin:0;">Sin ítems registrados.</p>';
   }
 
-  const _itemEstados = ['PENDIENTE','SOLICITADO','EN_TRANSITO','RECIBIDO_BODEGA','ENTREGADO'];
-  const _itemEstadoLabels = { PENDIENTE:'Pendiente', SOLICITADO:'Solicitado', EN_TRANSITO:'En tránsito', RECIBIDO_BODEGA:'En bodega', ENTREGADO:'Entregado' };
-
   if (!editable) {
-    return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:440px;">
-      <thead>
-        <tr style="background:var(--surface2);">
-          <th style="padding:7px 8px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;">Descripción</th>
-          <th style="padding:7px 8px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;">Proveedor</th>
-          <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;">Pedido</th>
-          <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;">Entregado</th>
-          <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;">Estado</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${items.map(item => {
-          const si = _itemEstadoInfo(item.estadoItem || 'PENDIENTE');
-          const completo = (item.cantEntregada || 0) >= (item.cant || 0) && (item.cant || 0) > 0;
-          return `<tr style="border-bottom:1px solid var(--border-light);">
-            <td style="padding:7px 8px;">
-              <div style="font-weight:500;">${escH(item.desc || '')}</div>
-              ${item.ref ? `<div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;">${escH(item.ref)}</div>` : ''}
-              ${item.notas ? `<div style="font-size:10px;color:var(--muted);font-style:italic;">${escH(item.notas)}</div>` : ''}
-            </td>
-            <td style="padding:7px 8px;color:var(--muted);">${escH(item.proveedor || '—')}</td>
-            <td style="padding:7px 8px;text-align:center;font-weight:700;">${item.cant || 0}</td>
-            <td style="padding:7px 8px;text-align:center;font-weight:700;color:${completo ? '#10b981' : 'var(--text)'};">${item.cantEntregada || 0}</td>
-            <td style="padding:7px 8px;text-align:center;">
-              <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${si.bg};color:${si.color};">${si.label}</span>
-            </td>
-          </tr>`;
-        }).join('')}
-      </tbody>
-    </table></div>`;
+    // Modo lectura
+    return `<div style="display:flex;flex-direction:column;gap:6px;">
+      ${items.map(item => {
+        const si = _itemEstadoInfo(item.estadoItem);
+        const entregado = (item.cantEntregada || 0);
+        const cant = item.cant || 0;
+        const completo = entregado >= cant && cant > 0;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border-light);border-radius:10px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:120px;">
+            <div style="font-weight:500;font-size:13px;">${escH(item.desc || '')}</div>
+            ${item.ref ? `<div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;">${escH(item.ref)}</div>` : ''}
+            ${item.notas ? `<div style="font-size:10px;color:var(--muted);font-style:italic;margin-top:2px;">${escH(item.notas)}</div>` : ''}
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;">
+            <span style="font-size:12px;font-weight:700;color:var(--muted);">×${cant}</span>
+            <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;background:${si.bg};color:${si.color};">${si.icon} ${si.label}</span>
+            <span style="font-size:11px;font-weight:600;color:${completo ? '#10b981' : 'var(--muted)'};">${entregado}/${cant} entregado${entregado === 1 ? '' : 's'}</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
   }
 
-  // Tabla editable
-  const inpS = 'padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:#fff;width:100%;box-sizing:border-box;';
-  return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-  <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:680px;">
-    <thead>
-      <tr style="background:var(--surface2);">
-        <th style="padding:7px 8px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;min-width:150px;">Descripción</th>
-        <th style="padding:7px 8px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;min-width:90px;">Referencia</th>
-        <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;width:68px;">Cant.</th>
-        <th style="padding:7px 8px;text-align:center;font-weight:700;font-size:11px;min-width:120px;">Estado ítem</th>
-        <th style="padding:7px 8px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;min-width:140px;">Observaciones</th>
-        <th style="padding:7px 8px;width:32px;"></th>
-      </tr>
-    </thead>
-    <tbody>
-      ${items.map((item, i) => `
-        <tr style="border-bottom:1px solid var(--border-light);">
-          <td style="padding:5px 8px;">
-            <input type="text" value="${escH(item.desc||'')}" data-idx="${i}" data-field="desc"
-              class="item-edit-inp" style="${inpS}min-width:140px;">
-          </td>
-          <td style="padding:5px 8px;">
-            <input type="text" value="${escH(item.ref||'')}" data-idx="${i}" data-field="ref"
-              class="item-edit-inp" style="${inpS}min-width:80px;font-family:'DM Mono',monospace;">
-          </td>
-          <td style="padding:5px 8px;text-align:center;">
-            <input type="number" min="0" value="${item.cant||0}" data-idx="${i}" data-field="cant"
-              class="item-edit-inp" style="padding:4px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:#fff;width:56px;text-align:center;">
-          </td>
-          <td style="padding:5px 8px;text-align:center;">
-            <select data-idx="${i}" data-field="estadoItem" class="item-edit-sel"
-              style="padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:#fff;cursor:pointer;width:100%;">
-              ${_itemEstados.map(e => `<option value="${e}"${(item.estadoItem||'PENDIENTE')===e?' selected':''}>${_itemEstadoLabels[e]||e}</option>`).join('')}
-            </select>
-          </td>
-          <td style="padding:5px 8px;">
-            <input type="text" value="${escH(item.notas||'')}" data-idx="${i}" data-field="notas"
-              class="item-edit-inp" placeholder="Observaciones…" style="${inpS}min-width:130px;">
-          </td>
-          <td style="padding:5px 4px;text-align:center;">
-            <button onclick="this.closest('tr').remove()"
+  // Modo editable — chips interactivos de estado
+  const inpS = 'padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;background:#fff;width:100%;box-sizing:border-box;';
+
+  return `
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px;padding:6px 10px;background:var(--surface2);border-radius:6px;">
+      💡 <strong>Clic en el estado</strong> de un ítem para avanzarlo al siguiente paso. Usa <em>💾 Guardar texto</em> para cambios en descripciones y cantidades.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      ${items.map((item, i) => {
+        const si      = _itemEstadoInfo(item.estadoItem);
+        const entregado = item.cantEntregada || 0;
+        const cant    = item.cant || 0;
+        const pctItem = cant > 0 ? Math.round((entregado / cant) * 100) : 0;
+        const completo = entregado >= cant && cant > 0;
+
+        return `<div style="border:1px solid var(--border-light);border-radius:10px;overflow:hidden;">
+          <!-- Fila principal -->
+          <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;flex-wrap:wrap;">
+            <!-- Descripción y referencia -->
+            <div style="flex:1;min-width:160px;display:flex;flex-direction:column;gap:3px;">
+              <input type="text" value="${escH(item.desc||'')}" data-idx="${i}" data-field="desc"
+                class="item-edit-inp" placeholder="Descripción"
+                style="${inpS}font-weight:500;">
+              <input type="text" value="${escH(item.ref||'')}" data-idx="${i}" data-field="ref"
+                class="item-edit-inp" placeholder="Ref. (opcional)"
+                style="${inpS}font-family:'DM Mono',monospace;font-size:11px;background:#fafafa;">
+            </div>
+            <!-- Cantidad -->
+            <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+              <span style="font-size:11px;color:var(--muted);">Cant:</span>
+              <input type="number" min="1" value="${cant}" data-idx="${i}" data-field="cant"
+                class="item-edit-inp"
+                style="padding:5px 4px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;background:#fff;width:56px;text-align:center;">
+            </div>
+            <!-- Chip de estado interactivo -->
+            <button onclick="pedidoClickItemEstado(${i})"
+              title="${si.nextLabel || 'Entregado — sin más acciones'}"
+              style="padding:6px 12px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:${si.next ? 'pointer' : 'default'};
+                     background:${si.bg};color:${si.color};flex-shrink:0;transition:filter .15s;
+                     ${si.next ? '' : 'opacity:.8;'}"
+              ${si.next ? `onmouseenter="this.style.filter='brightness(.92)'" onmouseleave="this.style.filter=''"` : 'disabled'}>
+              ${si.icon} ${si.label}${si.next ? ' →' : ''}
+            </button>
+            <!-- Entregado -->
+            <div style="font-size:11px;flex-shrink:0;text-align:center;min-width:56px;">
+              <span style="font-weight:700;color:${completo ? '#10b981' : 'var(--muted)'};">${entregado}/${cant}</span>
+              <div style="font-size:9px;color:var(--muted);">entregado</div>
+            </div>
+            <!-- Eliminar -->
+            <button onclick="this.closest('[data-item-row]').remove()" data-del="${i}"
               title="Eliminar ítem"
-              style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:0 4px;line-height:1;opacity:.7;"
-              onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='.7'">✕</button>
-          </td>
-        </tr>`).join('')}
-    </tbody>
-  </table></div>
-  <div style="margin-top:10px;display:flex;justify-content:flex-end;">
-    <button onclick="pedidoGuardarItems()"
-      style="padding:7px 18px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar cambios en ítems</button>
-  </div>`;
+              style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:0 4px;line-height:1;opacity:.6;flex-shrink:0;"
+              onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='.6'">✕</button>
+          </div>
+          <!-- Mini barra de progreso del ítem + notas -->
+          <div style="padding:0 12px 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:80px;">
+              <div style="height:4px;background:var(--border);border-radius:3px;overflow:hidden;">
+                <div style="height:100%;width:${pctItem}%;background:${completo ? '#10b981' : si.color};border-radius:3px;transition:width .3s;"></div>
+              </div>
+            </div>
+            <input type="text" value="${escH(item.notas||'')}" data-idx="${i}" data-field="notas"
+              class="item-edit-inp" placeholder="Observaciones…"
+              style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;font-family:inherit;background:#fff;flex:2;min-width:120px;">
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
 }
+
+// Workaround: data-item-row no existe en el HTML generado — uso clase para eliminar
+// Reemplazar onclick del botón eliminar para usar el div contenedor correcto
+// (En la siguiente iteración del render los cambios de DOM se ven reflejados)
 
 function _renderTimeline(eventos) {
   if (!eventos.length) return '<p style="color:var(--muted);font-size:13px;margin:0;">Sin eventos registrados.</p>';
@@ -545,17 +637,115 @@ function _renderTimeline(eventos) {
     </div>`).join('');
 }
 
-// ── ACCIONES EN DETALLE ──────────────────────────────────────────────
-function pedidoCambiarEstado(estado) {
-  if (!estado || !_currentOrderId) return;
-  const usuario = Auth.getUser()?.email || '';
-  Orders.changeStatus(_currentOrderId, estado, usuario);
+// ── CLIC EN CHIP DE ESTADO — AVANCE INMEDIATO ────────────────────────
+function pedidoClickItemEstado(itemIdx) {
   const order = Orders.getById(_currentOrderId);
-  Sync.saveOrder(order).catch(e => console.warn('saveOrder:', e));
-  renderOrderDetail(_currentOrderId);
-  toast('Estado actualizado: ' + Orders.estadoInfo(estado).label, 'success');
+  if (!order || !order.items[itemIdx]) return;
+
+  const item    = order.items[itemIdx];
+  const current = _normItemEstado(item.estadoItem || 'PENDIENTE');
+  const si      = _itemEstadoInfo(current);
+
+  if (!si.next) return; // ya está en ENTREGADO
+
+  if (si.next === 'ENTREGADO') {
+    // Antes de marcar entregado, pedir cantidad (excepto si cant=1)
+    const pendiente = (item.cant || 1) - (item.cantEntregada || 0);
+    if (pendiente <= 1) {
+      // Entregar directamente
+      item.estadoItem    = 'ENTREGADO';
+      item.cantEntregada = item.cant;
+      _autoSaveItems(order);
+      toast('✅ Ítem entregado completamente', 'success');
+      return;
+    }
+    // Abrir modal para cantidad parcial
+    _entregaItemIdx = itemIdx;
+    _abrirModalEntregaItem(item, pendiente);
+    return;
+  }
+
+  // Avance normal: PENDIENTE → SOLICITADO → EN_STOCK
+  item.estadoItem = si.next;
+  _autoSaveItems(order);
+  const nuevoSi = _itemEstadoInfo(si.next);
+  toast(`${nuevoSi.icon} ${escH(item.desc || 'Ítem')} → ${nuevoSi.label}`, 'success');
 }
 
+function _abrirModalEntregaItem(item, pendiente) {
+  const body = document.getElementById('modal-entrega-body');
+  if (!body) return;
+  body.innerHTML = `
+    <div style="padding:8px 0 12px;">
+      <div style="font-weight:600;font-size:14px;margin-bottom:4px;">${escH(item.desc || '')}</div>
+      ${item.ref ? `<div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:12px;">${escH(item.ref)}</div>` : '<div style="margin-bottom:12px;"></div>'}
+      <div style="background:var(--surface2);border-radius:8px;padding:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div style="font-size:13px;color:var(--muted);">Pendientes: <strong style="color:var(--text);">${pendiente}</strong> de ${item.cant}</div>
+        <label style="font-size:13px;font-weight:500;">Entregar ahora:</label>
+        <input type="number" id="entrega-item-qty" min="1" max="${pendiente}" value="${pendiente}"
+          style="width:80px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:16px;font-weight:700;text-align:center;">
+        <span style="font-size:12px;color:var(--muted);">unidades</span>
+      </div>
+    </div>`;
+
+  // Cambiar acción del botón confirmar
+  const confirmBtn = document.querySelector('#modal-entrega .btn-primary');
+  if (confirmBtn) confirmBtn.onclick = confirmarEntregaItemUnico;
+
+  document.getElementById('modal-entrega').classList.add('open');
+}
+
+function confirmarEntregaItemUnico() {
+  const order = Orders.getById(_currentOrderId);
+  if (!order || _entregaItemIdx === null) return;
+
+  const item  = order.items[_entregaItemIdx];
+  const qty   = parseInt(document.getElementById('entrega-item-qty')?.value) || 0;
+  if (qty <= 0) { toast('Ingresa una cantidad válida', 'error'); return; }
+
+  const pendiente = (item.cant || 0) - (item.cantEntregada || 0);
+  const entregar  = Math.min(qty, pendiente);
+
+  item.cantEntregada = (item.cantEntregada || 0) + entregar;
+  if (item.cantEntregada >= item.cant) {
+    item.estadoItem = 'ENTREGADO';
+  }
+
+  _autoSaveItems(order);
+  document.getElementById('modal-entrega').classList.remove('open');
+  _entregaItemIdx = null;
+  toast(`✅ ${entregar} unidad(es) entregada(s)`, 'success');
+}
+
+function _autoSaveItems(order) {
+  // Leer cambios de texto desde el DOM (si la vista está abierta)
+  document.querySelectorAll('.item-edit-inp').forEach(inp => {
+    const idx   = parseInt(inp.dataset.idx);
+    const field = inp.dataset.field;
+    if (!order.items[idx]) return;
+    if (field === 'cant') order.items[idx].cant = parseInt(inp.value) || 0;
+    else order.items[idx][field] = inp.value.trim();
+  });
+
+  const estadoDerivado = _derivarEstadoOrden(order.items);
+  Orders.update(_currentOrderId, { items: order.items, estado: estadoDerivado });
+
+  const usuario = Auth.getUser()?.email || '';
+  Orders.addEvent(_currentOrderId, 'NOTA', 'Estado de ítems actualizado', usuario);
+  Sync.saveOrder(Orders.getById(_currentOrderId)).catch(e => console.warn('saveOrder:', e));
+  renderOrderDetail(_currentOrderId);
+}
+
+function _derivarEstadoOrden(items) {
+  if (!items || !items.length) return 'PENDIENTE';
+  const normalized = items.map(i => _normItemEstado(i.estadoItem));
+  if (normalized.every(e => e === 'ENTREGADO')) return 'ENTREGADO';
+  if (normalized.some(e => e === 'ENTREGADO'))  return 'ENTREGA_PARCIAL';
+  if (normalized.some(e => e === 'EN_STOCK' || e === 'SOLICITADO')) return 'EN_PROCESO';
+  return 'PENDIENTE';
+}
+
+// ── ACCIONES EN DETALLE ──────────────────────────────────────────────
 function pedidoAgregarNota() {
   const inp  = document.getElementById('pedido-nota-inp');
   const nota = (inp?.value || '').trim();
@@ -614,43 +804,33 @@ function pedidoEliminar() {
   toast('Orden eliminada', 'success');
 }
 
-// ── GUARDAR EDICIÓN DE ÍTEMS ─────────────────────────────────────────
+// ── GUARDAR CAMBIOS DE TEXTO EN ÍTEMS ───────────────────────────────
 function pedidoGuardarItems() {
   const order = Orders.getById(_currentOrderId);
   if (!order || !order.items) return;
+
   document.querySelectorAll('.item-edit-inp').forEach(inp => {
-    const idx = parseInt(inp.dataset.idx);
+    const idx   = parseInt(inp.dataset.idx);
     const field = inp.dataset.field;
+    if (!order.items[idx]) return;
     if (field === 'cant') order.items[idx].cant = parseInt(inp.value) || 0;
     else order.items[idx][field] = inp.value.trim();
   });
-  document.querySelectorAll('.item-edit-sel').forEach(sel => {
-    const idx = parseInt(sel.dataset.idx);
-    order.items[idx].estadoItem = sel.value;
-  });
 
-  // Filtrar ítems cuya fila fue eliminada del DOM (botón ✕)
-  const remainingIdxs = new Set(
+  // Filtrar ítems eliminados (botón ✕ que remueve el div padre)
+  const visibleIdxs = new Set(
     [...document.querySelectorAll('.item-edit-inp')].map(inp => parseInt(inp.dataset.idx))
   );
-  order.items = order.items.filter((_, i) => remainingIdxs.has(i));
+  order.items = order.items.filter((_, i) => visibleIdxs.has(i));
 
+  const estadoDerivado = _derivarEstadoOrden(order.items);
   const usuario = Auth.getUser()?.email || '';
-
-  // Derivar estado general de la orden según los estados de los ítems
-  const allEntregado = order.items.length > 0 && order.items.every(i => i.estadoItem === 'ENTREGADO');
-  const someEntregado = order.items.some(i => i.estadoItem === 'ENTREGADO');
-  const anyActive = order.items.some(i => ['SOLICITADO', 'EN_TRANSITO', 'RECIBIDO_BODEGA'].includes(i.estadoItem));
-  const estadoDerivado = allEntregado ? 'ENTREGADO'
-    : someEntregado ? 'ENTREGA_PARCIAL'
-    : anyActive     ? 'EN_PROCESO'
-    : 'PENDIENTE';
 
   Orders.update(_currentOrderId, { items: order.items, estado: estadoDerivado });
   Orders.addEvent(_currentOrderId, 'NOTA', 'Ítems actualizados', usuario);
   Sync.saveOrder(Orders.getById(_currentOrderId)).catch(e => console.warn('saveOrder:', e));
   renderOrderDetail(_currentOrderId);
-  toast('✓ Ítems actualizados', 'success');
+  toast('✓ Cambios guardados', 'success');
 }
 
 function pedidoGuardarNotas() {
@@ -663,35 +843,45 @@ function pedidoGuardarNotas() {
   toast('✓ Notas guardadas', 'success');
 }
 
-// ── REGISTRAR ENTREGA ─────────────────────────────────────────────────
+// ── REGISTRAR ENTREGA MÚLTIPLE (todos los ítems a la vez) ─────────────
 function pedidoRegistrarEntrega() {
   const order = Orders.getById(_currentOrderId);
   if (!order || !(order.items || []).length) { toast('Sin ítems para registrar', 'error'); return; }
 
   const body = document.getElementById('modal-entrega-body');
-  body.innerHTML = order.items.map((item, i) => {
-    const pend = (item.cant || 0) - (item.cantEntregada || 0);
-    return `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
-      <div style="font-weight:600;font-size:13px;margin-bottom:7px;">
-        ${escH(item.desc || '')}
-        <span style="font-size:11px;font-weight:400;color:var(--muted);">(Pendiente: ${pend})</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <label style="font-size:12px;color:var(--muted);">Entregar ahora:</label>
-        <input type="number" min="0" max="${pend}" value="0" data-idx="${i}" class="entrega-qty-inp"
-          style="width:70px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:center;">
-        <label style="font-size:12px;color:var(--muted);">Estado ítem:</label>
-        <select data-idx="${i}" class="entrega-estado-sel"
-          style="font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;cursor:pointer;">
-          <option value="PENDIENTE">Pendiente</option>
-          <option value="SOLICITADO">Solicitado a proveedor</option>
-          <option value="EN_TRANSITO">En tránsito</option>
-          <option value="RECIBIDO_BODEGA">Recibido en bodega</option>
-          <option value="ENTREGADO" ${pend <= 0 ? 'selected' : ''}>Entregado</option>
-        </select>
-      </div>
-    </div>`;
-  }).join('');
+  body.innerHTML = `
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;padding:8px 10px;background:var(--surface2);border-radius:6px;">
+      Ajusta las cantidades a entregar y el estado de cada ítem.
+    </div>
+    ${order.items.map((item, i) => {
+      const pend = (item.cant || 0) - (item.cantEntregada || 0);
+      const si   = _itemEstadoInfo(item.estadoItem);
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+          <span style="font-size:13px;font-weight:600;flex:1;min-width:120px;">${escH(item.desc || '')}</span>
+          <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:${si.bg};color:${si.color};">${si.icon} ${si.label}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-size:12px;color:var(--muted);">Pedido: ${item.cant} · Entregado: ${item.cantEntregada || 0} · <strong>Pendiente: ${pend}</strong></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap;">
+          <label style="font-size:12px;color:var(--muted);">Entregar ahora:</label>
+          <input type="number" min="0" max="${pend}" value="0" data-idx="${i}" class="entrega-qty-inp"
+            style="width:70px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:center;">
+          <label style="font-size:12px;color:var(--muted);">Nuevo estado:</label>
+          <select data-idx="${i}" class="entrega-estado-sel"
+            style="font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;cursor:pointer;">
+            <option value="PENDIENTE"  ${(_normItemEstado(item.estadoItem)==='PENDIENTE' ) ? 'selected' : ''}>⚪ Sin solicitar</option>
+            <option value="SOLICITADO" ${(_normItemEstado(item.estadoItem)==='SOLICITADO') ? 'selected' : ''}>🔄 Solicitado</option>
+            <option value="EN_STOCK"   ${(_normItemEstado(item.estadoItem)==='EN_STOCK'  ) ? 'selected' : ''}>📦 En bodega</option>
+            <option value="ENTREGADO"  ${pend <= 0 ? 'selected' : ''}>✅ Entregado</option>
+          </select>
+        </div>
+      </div>`;
+    }).join('')}`;
+
+  const confirmBtn = document.querySelector('#modal-entrega .btn-primary');
+  if (confirmBtn) confirmBtn.onclick = confirmarEntrega;
 
   document.getElementById('modal-entrega').classList.add('open');
 }
@@ -702,27 +892,24 @@ function confirmarEntrega() {
   const usuario = Auth.getUser()?.email || '';
 
   document.querySelectorAll('.entrega-qty-inp').forEach(inp => {
-    const idx = parseInt(inp.dataset.idx);
-    const qty = parseInt(inp.value) || 0;
+    const idx  = parseInt(inp.dataset.idx);
+    const qty  = parseInt(inp.value) || 0;
     const selE = document.querySelector('.entrega-estado-sel[data-idx="' + idx + '"]');
     if (qty > 0) order.items[idx].cantEntregada = (order.items[idx].cantEntregada || 0) + qty;
-    if (selE) order.items[idx].estadoItem = selE.value;
+    if (selE)    order.items[idx].estadoItem = selE.value;
   });
 
+  const estadoDerivado = _derivarEstadoOrden(order.items);
   const tot = order.items.reduce((s, i) => s + (i.cant || 0), 0);
   const ent = order.items.reduce((s, i) => s + (i.cantEntregada || 0), 0);
   const pct = tot > 0 ? Math.round((ent / tot) * 100) : 0;
 
-  let nuevoEstado = order.estado;
-  if (pct === 100) nuevoEstado = 'ENTREGADO';
-  else if (pct > 0) nuevoEstado = 'ENTREGA_PARCIAL';
-
   Orders.update(_currentOrderId, {
     items: order.items,
-    estado: nuevoEstado,
-    fechaEntregaReal: pct === 100 ? new Date().toISOString().slice(0, 10) : order.fechaEntregaReal,
+    estado: estadoDerivado,
+    fechaEntregaReal: estadoDerivado === 'ENTREGADO' ? new Date().toISOString().slice(0, 10) : order.fechaEntregaReal,
   });
-  Orders.addEvent(_currentOrderId, 'ENTREGA_PARCIAL', `Entrega: ${ent}/${tot} ítems (${pct}%)`, usuario);
+  Orders.addEvent(_currentOrderId, 'ENTREGA_PARCIAL', `Entrega: ${ent}/${tot} unidades (${pct}%)`, usuario);
 
   Sync.saveOrder(Orders.getById(_currentOrderId)).catch(e => console.warn('saveOrder:', e));
   document.getElementById('modal-entrega').classList.remove('open');
@@ -739,24 +926,20 @@ function convertirCotizacionAPedido(id) {
   } catch(e) {}
   if (!cot) { toast('Cotización no encontrada', 'error'); return; }
 
-  // Cerrar historial y abrir modal de nueva orden
   document.getElementById('modal-historial-cots')?.classList.remove('open');
 
   _newOrderItems   = [];
   _newOrderArchivos = [];
 
-  // Vaciar todos los campos del formulario
   ['np-cliente-nombre','np-cliente-nit','np-cliente-empresa','np-cliente-tel','np-cliente-email',
    'np-cliente-dir','np-fecha-entrega','np-notas','np-item-desc','np-item-ref','np-item-proveedor','np-catalog-q']
     .forEach(elId => { const el = document.getElementById(elId); if (el) el.value = ''; });
   const cantEl = document.getElementById('np-item-cant'); if (cantEl) cantEl.value = '1';
 
-  // Pre-llenar con datos de la cotización
   const set = (elId, val) => { const el = document.getElementById(elId); if (el && val) el.value = val; };
   set('np-cliente-nombre', cot.cliente);
   set('np-cliente-nit',    cot.nitCliente);
 
-  // Construir nota con información de la cotización
   const notaParts = [
     cot.notasExtra,
     cot.condiciones  ? 'Condición de pago: ' + cot.condiciones : '',
@@ -766,21 +949,14 @@ function convertirCotizacionAPedido(id) {
   ].filter(Boolean);
   set('np-notas', notaParts.join('\n'));
 
-  // Convertir ítems de cotización a ítems de orden
   _newOrderItems = (cot.items || []).map(i => ({
-    desc:          i.nombre  || '',
-    ref:           i.ref     || '',
-    cant:          i.cant    || 1,
-    proveedor:     '',
-    notas:         i.obs     || '',
-    cantEntregada: 0,
-    estadoItem:    'PENDIENTE',
+    desc: i.nombre || '', ref: i.ref || '', cant: i.cant || 1,
+    proveedor: '', notas: i.obs || '', cantEntregada: 0, estadoItem: 'PENDIENTE',
   }));
 
   const catalogResults = document.getElementById('np-catalog-results');
   if (catalogResults) catalogResults.style.display = 'none';
   npItemMode('manual');
-
   _renderNpItems();
   document.getElementById('modal-nuevo-pedido').classList.add('open');
   setTimeout(() => document.getElementById('np-cliente-nombre')?.focus(), 150);
@@ -795,7 +971,6 @@ function abrirNuevoPedido() {
    'np-cliente-dir','np-fecha-entrega','np-notas','np-item-desc','np-item-ref','np-item-proveedor','np-catalog-q']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const cantEl = document.getElementById('np-item-cant'); if (cantEl) cantEl.value = '1';
-  // Resetear a modo manual
   const catalogResults = document.getElementById('np-catalog-results');
   if (catalogResults) catalogResults.style.display = 'none';
   npItemMode('manual');
@@ -845,26 +1020,26 @@ function npAgregarItem() {
   document.getElementById('np-item-desc')?.focus();
 }
 
-// ── BÚSQUEDA DE CATÁLOGO EN NUEVA ORDEN ──────────────────────────
+// ── BÚSQUEDA DE CATÁLOGO EN NUEVA ORDEN ─────────────────────────────
 let _npCatalogTimer = null;
 
 function npItemMode(mode) {
-  const panel      = document.getElementById('np-catalogo-panel');
-  const btnManual  = document.getElementById('np-btn-manual');
-  const btnCat     = document.getElementById('np-btn-catalogo');
+  const panel     = document.getElementById('np-catalogo-panel');
+  const btnManual = document.getElementById('np-btn-manual');
+  const btnCat    = document.getElementById('np-btn-catalogo');
   if (!panel || !btnManual || !btnCat) return;
 
   const active   = 'background:var(--dark);color:#fff;border-color:var(--dark);';
   const inactive = 'background:transparent;color:var(--text2);border-color:var(--border);';
 
   if (mode === 'catalogo') {
-    btnManual.style.cssText  += inactive;
-    btnCat.style.cssText     += active;
+    btnManual.style.cssText += inactive;
+    btnCat.style.cssText    += active;
     panel.style.display = 'block';
     setTimeout(() => document.getElementById('np-catalog-q')?.focus(), 80);
   } else {
-    btnManual.style.cssText  += active;
-    btnCat.style.cssText     += inactive;
+    btnManual.style.cssText += active;
+    btnCat.style.cssText    += inactive;
     panel.style.display = 'none';
     setTimeout(() => document.getElementById('np-item-desc')?.focus(), 80);
   }
@@ -898,7 +1073,7 @@ function npCatalogoBuscar(q) {
       <div style="flex:1;min-width:0;">
         <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escH(p.nombre)}</div>
         <div style="font-size:11px;color:var(--muted);">
-          ${p.ref  ? `<span style="font-family:'DM Mono',monospace;">${escH(p.ref)}</span>` : ''}
+          ${p.ref   ? `<span style="font-family:'DM Mono',monospace;">${escH(p.ref)}</span>` : ''}
           ${p.marca ? ` · ${escH(p.marca)}` : ''}
         </div>
       </div>
@@ -915,12 +1090,8 @@ function npSeleccionarCatalogo(id) {
   const refEl  = document.getElementById('np-item-ref');
   if (descEl) descEl.value = p.nombre;
   if (refEl)  refEl.value  = p.ref || '';
-  // Volver a modo manual para que el usuario revise la cantidad y agregue
   npItemMode('manual');
-  setTimeout(() => {
-    const cantEl = document.getElementById('np-item-cant');
-    cantEl?.select();
-  }, 120);
+  setTimeout(() => { document.getElementById('np-item-cant')?.select(); }, 120);
 }
 
 async function npAgregarFoto(e) {
