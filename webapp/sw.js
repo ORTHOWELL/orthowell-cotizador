@@ -7,7 +7,7 @@
  *   - Google APIs → Network-only (requieren auth token)
  */
 
-const CACHE_NAME   = 'orthowell-v5.9';
+const CACHE_NAME   = 'orthowell-v5.10';
 const CDN_CACHE    = 'orthowell-cdn-v2.6';
 const IMAGES_CACHE = 'orthowell-images-v2.9';
 
