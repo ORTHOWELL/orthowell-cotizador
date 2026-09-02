@@ -7,7 +7,7 @@
  *   - Google APIs → Network-only (requieren auth token)
  */
 
-const CACHE_NAME   = 'orthowell-v5.11';
+const CACHE_NAME   = 'orthowell-v5.12';
 const CDN_CACHE    = 'orthowell-cdn-v2.6';
 const IMAGES_CACHE = 'orthowell-images-v2.9';
 
@@ -23,6 +23,7 @@ const STATIC_ASSETS = [
   './js/pdf.js',
   './js/orders.js',
   './js/app.js',
+  './oauth-callback.html',
   './manifest.json',
   './icons/logo.png',
   './icons/icon-192.png',

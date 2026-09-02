@@ -1,10 +1,17 @@
 /**
  * auth.js — Autenticación Google OAuth via Google Identity Services (GIS)
- * No requiere backend: el token se obtiene directamente en el navegador.
  *
- * NOTA: No se usa renovación automática en background porque la librería GIS
- * abre una ventana popup incluso con prompt:'none', lo que resulta molesto.
- * El flujo es: token expira → banner naranja → usuario renueva con un clic.
+ * Flujo de renovación:
+ *   1. Al obtener/restaurar un token válido → se programa renovación silenciosa
+ *      5 min antes de que expire, usando un iframe oculto (sin popup visible).
+ *   2. Si el iframe falla (cookies de terceros bloqueadas, usuario desconectado
+ *      de Google, etc.) → el setInterval cada 30 s detecta la expiración y
+ *      muestra el banner naranja para que el usuario renueve con un clic.
+ *
+ * NOTA: El iframe apunta a oauth-callback.html, que debe estar registrado como
+ * "URI de redireccionamiento autorizado" en Google Cloud Console:
+ *   https://orthowell.github.io/orthowell-cotizador/webapp/oauth-callback.html
+ *   http://localhost:5500/oauth-callback.html  (desarrollo local)
  */
 
 const Auth = (() => {
@@ -13,6 +20,7 @@ const Auth = (() => {
   let _userInfo = null;
   let _tokenClient = null;
   let _loginRequested = false;
+  let _renewalTimer = null;
 
   // ── INIT ──────────────────────────────────────────────────────────
   async function init() {
@@ -41,13 +49,13 @@ const Auth = (() => {
       callback: _handleTokenResponse,
     });
 
-    // Revisar cada 30 s si el token expiró para mostrar el banner a tiempo
+    // Fallback: cada 30 s verificar si el token expiró y el iframe falló
     setInterval(() => {
       if (!_userInfo || !_token) return;
       if (Date.now() >= _tokenExpiry) _showRenewalBanner();
     }, 30 * 1000);
 
-    // Intentar restaurar sesión
+    // Intentar restaurar sesión desde localStorage
     const saved = localStorage.getItem('ow_user');
     if (saved) {
       try {
@@ -56,27 +64,87 @@ const Auth = (() => {
         _tokenExpiry = parseInt(localStorage.getItem('ow_token_exp') || '0');
 
         if (_token && Date.now() < _tokenExpiry) {
-          // ── Token válido ─────────────────────────────────────────
           _showApp();
+          _scheduleRenewal(); // programar renovación silenciosa
           return true;
         }
 
         if (_userInfo) {
-          // ── Token expirado pero usuario guardado ─────────────────
-          // Mostrar la app con el banner — el usuario renueva con un clic cuando quiera.
+          // Token expirado: intentar renovar silenciosamente antes de mostrar el banner
           _showApp();
-          _showRenewalBanner();
+          _silentRenewIframe().catch(() => _showRenewalBanner());
           return false;
         }
       } catch(e) {}
     }
 
-    // No hay sesión guardada → mostrar login
     _showLogin();
     return false;
   }
 
-  // ── HANDLE TOKEN RESPONSE ────────────────────────────────────────
+  // ── RENOVACIÓN SILENCIOSA VÍA IFRAME ────────────────────────────
+  function _scheduleRenewal() {
+    clearTimeout(_renewalTimer);
+    // Renovar 5 min antes de que expire
+    const delay = _tokenExpiry - Date.now() - 5 * 60 * 1000;
+    _renewalTimer = setTimeout(() => {
+      _silentRenewIframe().catch(() => {
+        // Si falla, el setInterval de 30 s mostrará el banner cuando expire
+      });
+    }, delay > 0 ? delay : 0);
+  }
+
+  async function _silentRenewIframe() {
+    if (!_userInfo?.email) throw new Error('no_user');
+
+    const base = location.origin + location.pathname.replace(/\/[^/]*$/, '/');
+    const redirectUri = base + 'oauth-callback.html';
+
+    const params = new URLSearchParams({
+      client_id:     CONFIG.GOOGLE_CLIENT_ID,
+      redirect_uri:  redirectUri,
+      response_type: 'token',
+      scope:         CONFIG.GOOGLE_SCOPES,
+      prompt:        'none',
+      login_hint:    _userInfo.email,
+    });
+
+    return new Promise((resolve, reject) => {
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText = 'display:none;width:1px;height:1px;border:0;position:absolute;top:-200px;left:-200px;';
+      iframe.src = 'https://accounts.google.com/o/oauth2/v2/auth?' + params;
+
+      const timer = setTimeout(() => {
+        iframe.remove();
+        reject(new Error('timeout'));
+      }, 15000);
+
+      function handler(ev) {
+        if (ev.origin !== location.origin) return;
+        if (ev.data?.type !== 'ow_oauth_silent') return;
+        window.removeEventListener('message', handler);
+        clearTimeout(timer);
+        iframe.remove();
+
+        if (ev.data.error || !ev.data.access_token) {
+          reject(new Error(ev.data.error || 'no_token'));
+          return;
+        }
+
+        _token = ev.data.access_token;
+        _tokenExpiry = Date.now() + (parseInt(ev.data.expires_in || '3600') - 60) * 1000;
+        localStorage.setItem('ow_token', _token);
+        localStorage.setItem('ow_token_exp', _tokenExpiry.toString());
+        document.getElementById('session-renewal-banner')?.remove();
+        _scheduleRenewal(); // programar la próxima renovación
+        resolve(_token);
+      }
+      window.addEventListener('message', handler);
+      document.body.appendChild(iframe);
+    });
+  }
+
+  // ── HANDLE TOKEN RESPONSE (login manual / renovación con clic) ───
   function _handleTokenResponse(resp) {
     const wasLogin = _loginRequested;
     _loginRequested = false;
@@ -90,13 +158,12 @@ const Auth = (() => {
       return;
     }
 
-    // ── Token recibido con éxito ──────────────────────────────────
     _token = resp.access_token;
     _tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
     localStorage.setItem('ow_token', _token);
     localStorage.setItem('ow_token_exp', _tokenExpiry.toString());
+    _scheduleRenewal(); // programar renovación silenciosa automática
 
-    // Obtener info del usuario si es login nuevo
     fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { Authorization: 'Bearer ' + _token }
     })
@@ -113,7 +180,7 @@ const Auth = (() => {
     });
   }
 
-  // ── BARRA DE AVISO DE SESIÓN EXPIRADA ───────────────────────────
+  // ── BANNER DE SESIÓN EXPIRADA (fallback si iframe falla) ─────────
   function _showRenewalBanner() {
     if (document.getElementById('session-renewal-banner')) return;
     const el = document.createElement('div');
@@ -155,6 +222,7 @@ const Auth = (() => {
   }
 
   function logout() {
+    clearTimeout(_renewalTimer);
     if (_token) google.accounts.oauth2.revoke(_token, () => {});
     _token = null; _userInfo = null; _tokenExpiry = 0;
     _loginRequested = false;
@@ -168,10 +236,13 @@ const Auth = (() => {
   // ── ENSURE TOKEN (para llamadas a la API) ────────────────────────
   async function ensureToken() {
     if (_token && Date.now() < _tokenExpiry) return _token;
-    // Token expirado — mostrar banner y rechazar.
-    // NO intentar popup silencioso (puede mostrar ventana de Google inesperada).
-    if (_userInfo) _showRenewalBanner();
-    throw new Error('session_expired');
+    // Intentar renovación silenciosa de último momento
+    try {
+      return await _silentRenewIframe();
+    } catch(e) {
+      if (_userInfo) _showRenewalBanner();
+      throw new Error('session_expired');
+    }
   }
 
   // ── UI HELPERS ───────────────────────────────────────────────────
@@ -183,8 +254,7 @@ const Auth = (() => {
   function _showApp() {
     const overlay = document.getElementById('auth-overlay');
     if (overlay) overlay.classList.add('hidden');
-    const banner = document.getElementById('session-renewal-banner');
-    if (banner) banner.remove();
+    document.getElementById('session-renewal-banner')?.remove();
     _updateHeaderUser();
   }
   function _showError(msg) {
