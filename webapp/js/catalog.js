@@ -20,19 +20,48 @@ const Catalog = (() => {
     {id:10,nombre:'MANGO LARINGOSCOPIO MEDIANO SG',precio:688000,ref:'LARING-MANGO-SG',marca:'SG'},
   ].map(p => ({...p, precio2:0, precio3:0, costo:0, iva:0, saldo:0, imageUrl:'', driveFileId:''}));
 
-  // ── PERSISTENCIA LOCAL (cache sin imágenes base64) ──────────────
+  // ── PERSISTENCIA LOCAL ───────────────────────────────────────────
+  // Dos capas de caché:
+  //   _slim  — solo metadatos (sin imageUrl). Siempre cabe en localStorage.
+  //            Garantiza que todos los productos se vean offline.
+  //   _full  — completo con thumbnails base64. Puede fallar si localStorage está lleno.
+  //            En ese caso _slim actúa como fallback.
+  const _SLIM_KEY = CONFIG.CATALOG_CACHE_KEY + '_slim';
+
   function _saveCache() {
+    // Versión slim: siempre guardar (cabe fácilmente aunque haya muchos productos)
+    try {
+      const slim = _catalog.map(p => ({ ...p, imageUrl: '', driveFileId: p.driveFileId || '' }));
+      localStorage.setItem(_SLIM_KEY, JSON.stringify(slim));
+    } catch(e) {
+      console.warn('catalog slim cache failed:', e);
+    }
+    // Versión completa: intentar, si falla los thumbnails se pierden pero el catálogo no
     try {
       localStorage.setItem(CONFIG.CATALOG_CACHE_KEY, JSON.stringify(_catalog));
     } catch(e) {
-      // localStorage lleno → limpiar cache antiguo
-      localStorage.removeItem(CONFIG.CATALOG_CACHE_KEY);
+      localStorage.removeItem(CONFIG.CATALOG_CACHE_KEY); // limpiar dato incompleto
     }
   }
+
   function _loadCache() {
-    const raw = localStorage.getItem(CONFIG.CATALOG_CACHE_KEY);
-    if (!raw) return null;
-    try { return JSON.parse(raw); } catch(e) { return null; }
+    // 1. Intentar versión completa (con imágenes)
+    try {
+      const raw = localStorage.getItem(CONFIG.CATALOG_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch(e) {}
+    // 2. Fallback: versión slim (sin imágenes — el catálogo completo igual se muestra)
+    try {
+      const slim = localStorage.getItem(_SLIM_KEY);
+      if (slim) {
+        const parsed = JSON.parse(slim);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch(e) {}
+    return null;
   }
 
   // ── INIT ────────────────────────────────────────────────────────
