@@ -28,6 +28,62 @@ const Catalog = (() => {
   //            En ese caso _slim actúa como fallback.
   const _SLIM_KEY = CONFIG.CATALOG_CACHE_KEY + '_slim';
 
+  // ── INDEXEDDB PARA THUMBNAILS OFFLINE ───────────────────────────
+  const _IDB_NAME  = 'ow_images_v1';
+  const _IDB_STORE = 'images';
+  let _idb = null;
+
+  function _openIDB() {
+    if (_idb) return Promise.resolve(_idb);
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(_IDB_NAME, 1);
+      req.onupgradeneeded = e => e.target.result.createObjectStore(_IDB_STORE);
+      req.onsuccess = e => { _idb = e.target.result; resolve(_idb); };
+      req.onerror   = () => reject(req.error);
+    });
+  }
+  function _idbGet(fileId) {
+    return _openIDB().then(db => new Promise((resolve, reject) => {
+      const req = db.transaction(_IDB_STORE, 'readonly').objectStore(_IDB_STORE).get(fileId);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror   = () => reject(req.error);
+    }));
+  }
+  function _idbPut(fileId, b64) {
+    return _openIDB().then(db => new Promise((resolve, reject) => {
+      const tx = db.transaction(_IDB_STORE, 'readwrite');
+      tx.objectStore(_IDB_STORE).put(b64, fileId);
+      tx.oncomplete = resolve;
+      tx.onerror    = () => reject(tx.error);
+    }));
+  }
+  // Thumb 200px para IDB (offline) — separado del thumb 400px que va a Sheets
+  function _compressThumbIDB(b64) {
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 200;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', 0.70));
+      };
+      img.onerror = () => resolve(null);
+      img.src = b64;
+    });
+  }
+  function _saveThumbToIDB(fileId, b64OrBlob) {
+    const toB64 = b64OrBlob instanceof Blob ? _blobToB64(b64OrBlob) : Promise.resolve(b64OrBlob);
+    toB64.then(b64 => _compressThumbIDB(b64)).then(thumb => {
+      if (thumb) _idbPut(fileId, thumb).catch(() => {});
+    }).catch(() => {});
+  }
+
   function _saveCache() {
     // Versión slim: siempre guardar (cabe fácilmente aunque haya muchos productos)
     try {
@@ -333,6 +389,8 @@ const Catalog = (() => {
     const blob = await r.blob();
     const objUrl = URL.createObjectURL(blob);
     _driveImgCache.set(fileId, objUrl);
+    // Guardar thumb 200px en IDB para que esté disponible offline
+    _saveThumbToIDB(fileId, blob);
     return objUrl;
   }
 
@@ -364,11 +422,26 @@ const Catalog = (() => {
       return;
     }
 
-    // Fallback: Drive API con token OAuth (solo admin / dueño del archivo)
-    if (id && Auth.isAuthenticated()) {
-      _fetchDriveBlob(id)
-        .then(src => { im.onerror = _placeholder; im.src = src; })
-        .catch(_placeholder);
+    if (id) {
+      if (Auth.isAuthenticated()) {
+        // Online: Drive API en alta calidad; si falla, intentar IDB
+        _fetchDriveBlob(id)
+          .then(src => { im.onerror = _placeholder; im.src = src; })
+          .catch(() => {
+            _idbGet(id).then(cached => {
+              if (cached) { im.onerror = _placeholder; im.src = cached; }
+              else _placeholder();
+            }).catch(_placeholder);
+          });
+      } else {
+        // Offline: buscar thumbnail guardado en IndexedDB
+        _idbGet(id)
+          .then(cached => {
+            if (cached) { im.onerror = _placeholder; im.src = cached; }
+            else _placeholder();
+          })
+          .catch(_placeholder);
+      }
     } else if (url) {
       im.src = url;
       im.onerror = _placeholder;
@@ -456,6 +529,7 @@ const Catalog = (() => {
           setImage(target.catId, thumb, result.fileId);
           _clearImageCache();
           _driveImgCache.set(result.fileId, selected);
+          _saveThumbToIDB(result.fileId, selected);
         } catch(e) {
           console.warn('Drive upload failed, storing thumb only:', e);
           setImage(target.catId, thumb, '');
