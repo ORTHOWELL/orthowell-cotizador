@@ -7,7 +7,7 @@
  *   - Google APIs → Network-only (requieren auth token)
  */
 
-const CACHE_NAME   = 'orthowell-v5.12';
+const CACHE_NAME   = 'orthowell-v5.13';
 const CDN_CACHE    = 'orthowell-cdn-v2.6';
 const IMAGES_CACHE = 'orthowell-images-v2.9';
 
@@ -31,6 +31,7 @@ const STATIC_ASSETS = [
 ];
 
 const CDN_ASSETS = [
+  'https://accounts.google.com/gsi/client',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
   'https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&family=Barlow+Condensed:wght@600;700;800&display=swap',
@@ -72,11 +73,18 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // Google APIs: Network-only
+  // Google APIs: Network-only (excepto la librería GIS que se cachea para modo offline)
   if (url.hostname.includes('googleapis.com') ||
-      url.hostname.includes('accounts.google.com') ||
       url.hostname.includes('oauth2.googleapis.com')) {
     return;
+  }
+  if (url.hostname.includes('accounts.google.com')) {
+    if (url.pathname.startsWith('/gsi/')) {
+      // Librería de autenticación: Cache-first para que funcione offline
+      event.respondWith(cacheFirst(event.request, CDN_CACHE));
+      return;
+    }
+    return; // Endpoints OAuth: siempre red
   }
 
   // Drive / imágenes autenticadas: pasar sin cachear

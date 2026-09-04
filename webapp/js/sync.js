@@ -392,12 +392,19 @@ const Sync = (() => {
 
   // ── USUARIOS ─────────────────────────────────────────────────────
   async function checkUserAccess(email, nombre) {
-    // Sin email → denegar (pasa si faltan scopes openid/email)
     if (!email) {
       return { allowed: false, message: 'No se pudo obtener tu email de Google. Cierra sesión y vuelve a ingresar.' };
     }
 
     const isAdmin = email.trim().toLowerCase() === (CONFIG.ADMIN_EMAIL || '').trim().toLowerCase();
+
+    // Modo offline: usar rol guardado en localStorage
+    if (!navigator.onLine) {
+      if (isAdmin) return { allowed: true, rol: 'admin' };
+      const cachedRol = localStorage.getItem('ow_rol');
+      if (cachedRol) return { allowed: true, rol: cachedRol };
+      return { allowed: false, message: 'Sin conexión y sin acceso previo registrado. Conéctate para ingresar por primera vez.' };
+    }
 
     try {
       const token = await Auth.ensureToken();
@@ -449,6 +456,8 @@ const Sync = (() => {
     } catch(e) {
       console.error('checkUserAccess:', e);
       if (isAdmin) return { allowed: true, rol: 'admin' };
+      const cachedRol = localStorage.getItem('ow_rol');
+      if (cachedRol) return { allowed: true, rol: cachedRol };
       return { allowed: false, message: 'Error al verificar acceso. Intenta de nuevo.' };
     }
   }
@@ -581,7 +590,48 @@ const Sync = (() => {
     } catch(e) { return []; }
   }
 
+  // ── COLA OFFLINE ─────────────────────────────────────────────────
+  const _QUEUE_KEY = 'ow_sync_queue';
+
+  function _enqueue(type, payload) {
+    try {
+      const q = JSON.parse(localStorage.getItem(_QUEUE_KEY) || '[]');
+      // Deduplicar: reemplazar entrada del mismo tipo e ID
+      const filtered = q.filter(item =>
+        !(item.type === type && item.payload?.id === payload?.id)
+      );
+      filtered.push({ type, payload, ts: Date.now() });
+      localStorage.setItem(_QUEUE_KEY, JSON.stringify(filtered));
+    } catch(e) {}
+  }
+
+  async function flushQueue() {
+    let q;
+    try { q = JSON.parse(localStorage.getItem(_QUEUE_KEY) || '[]'); } catch(e) { q = []; }
+    if (!q.length) return;
+    const failed = [];
+    let flushed = 0;
+    for (const item of q) {
+      try {
+        if      (item.type === 'saveOrder')          await saveOrder(item.payload);
+        else if (item.type === 'saveCotizacion')     await saveCotizacion(item.payload);
+        else if (item.type === 'deleteOrder')        await deleteOrder(item.payload.id);
+        else if (item.type === 'deleteCotizacion')  await deleteCotizacion(item.payload.id);
+        flushed++;
+      } catch(e) { failed.push(item); }
+    }
+    try { localStorage.setItem(_QUEUE_KEY, JSON.stringify(failed)); } catch(e) {}
+    if (flushed > 0) {
+      if (typeof toast !== 'undefined') toast(`✓ ${flushed} cambio(s) sincronizados`, 'success');
+    }
+  }
+
+  function _isOfflineError(e) {
+    return !navigator.onLine || e?.message === 'offline';
+  }
+
   async function saveOrder(order) {
+    if (!navigator.onLine) { _enqueue('saveOrder', order); return; }
     const token = await Auth.ensureToken();
     // Crear hoja Pedidos si no existe
     await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}:batchUpdate`, {
@@ -609,6 +659,7 @@ const Sync = (() => {
   }
 
   async function deleteOrder(id) {
+    if (!navigator.onLine) { _enqueue('deleteOrder', { id }); return; }
     const token = await Auth.ensureToken();
     const rAll = await fetch(
       `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.ORDERS_SHEET}!A:B`,
@@ -646,6 +697,7 @@ const Sync = (() => {
   }
 
   async function saveCotizacion(cot) {
+    if (!navigator.onLine) { _enqueue('saveCotizacion', cot); return; }
     const token = await Auth.ensureToken();
     await fetch(`${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}:batchUpdate`, {
       method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -671,6 +723,7 @@ const Sync = (() => {
   }
 
   async function deleteCotizacion(id) {
+    if (!navigator.onLine) { _enqueue('deleteCotizacion', { id }); return; }
     const token = await Auth.ensureToken();
     const rAll = await fetch(
       `${SHEETS_BASE}/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.COTS_SHEET}!A:B`,
@@ -694,6 +747,7 @@ const Sync = (() => {
     loadFromSheets,
     saveCatalogToSheets,
     uploadImageToDrive,
+    flushQueue,
     ensureDriveFolder,
     migrateFromLocalStorage,
     hasPendingMigration,

@@ -55,6 +55,13 @@ const Auth = (() => {
       if (Date.now() >= _tokenExpiry) _showRenewalBanner();
     }, 30 * 1000);
 
+    // Cuando vuelva la conexión: intentar renovar si el token expiró mientras offline
+    window.addEventListener('online', () => {
+      if (_userInfo && Date.now() >= _tokenExpiry) {
+        _silentRenewIframe().catch(() => _showRenewalBanner());
+      }
+    });
+
     // Intentar restaurar sesión desde localStorage
     const saved = localStorage.getItem('ow_user');
     if (saved) {
@@ -70,9 +77,12 @@ const Auth = (() => {
         }
 
         if (_userInfo) {
-          // Token expirado: intentar renovar silenciosamente antes de mostrar el banner
           _showApp();
-          _silentRenewIframe().catch(() => _showRenewalBanner());
+          if (navigator.onLine) {
+            // Con conexión: intentar renovar silenciosamente
+            _silentRenewIframe().catch(() => _showRenewalBanner());
+          }
+          // Sin conexión: el listener 'online' intentará renovar cuando vuelva la red
           return false;
         }
       } catch(e) {}
@@ -236,6 +246,7 @@ const Auth = (() => {
   // ── ENSURE TOKEN (para llamadas a la API) ────────────────────────
   async function ensureToken() {
     if (_token && Date.now() < _tokenExpiry) return _token;
+    if (!navigator.onLine) throw new Error('offline');
     // Intentar renovación silenciosa de último momento
     try {
       return await _silentRenewIframe();

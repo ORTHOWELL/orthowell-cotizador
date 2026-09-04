@@ -133,6 +133,7 @@ const App = (() => {
       return;
     }
     _rol = access.rol;
+    localStorage.setItem('ow_rol', _rol); // persistir para modo offline
 
     // Mostrar/ocultar botón de admin y badge de rol en el header
     const btnAdmin = document.getElementById('btn-admin-users');
@@ -278,6 +279,8 @@ const App = (() => {
 
   // ── ON ONLINE ─────────────────────────────────────────────────────
   async function onOnline() {
+    // Enviar cambios que quedaron encolados sin conexión
+    try { await Sync.flushQueue(); } catch(e) {}
     if (!Auth.isAuthenticated()) return;
     try {
       const remote = await Sync.loadFromSheets();
@@ -291,6 +294,7 @@ const App = (() => {
   // ── ON LOGOUT ─────────────────────────────────────────────────────
   function onLogout() {
     _rol = 'vendedor'; _profile = null;
+    localStorage.removeItem('ow_rol');
     Sync.stopAutoSync();
     window._cotItems = [];
     renderItems();
