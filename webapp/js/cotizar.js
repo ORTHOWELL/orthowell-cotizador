@@ -163,10 +163,17 @@ function renderItems() {
     thumbDiv.dataset.idx = idx;
     thumbDiv.title = 'Clic para agregar imagen';
     thumbDiv.onclick = () => abrirImgModal('cot', null, idx);
-    if (item.imageUrl || item.driveFileId) {
+    // Buscar imagen actualizada en catálogo (por ref o nombre) para cubrir
+    // cotizaciones antiguas que no tienen driveFileId guardado en el ítem
+    const _catProd = Catalog.getAll().find(p =>
+      (item.ref && p.ref && p.ref === item.ref) || p.nombre === item.nombre
+    );
+    const _imgUrl     = _catProd?.imageUrl     || item.imageUrl     || '';
+    const _imgDriveId = _catProd?.driveFileId  || item.driveFileId  || '';
+    if (_imgUrl || _imgDriveId) {
       const im = document.createElement('img');
       im.alt = '';
-      Catalog.loadImage(im, item.imageUrl, item.driveFileId, thumbDiv);
+      Catalog.loadImage(im, _imgUrl, _imgDriveId, thumbDiv);
       thumbDiv.appendChild(im);
     } else {
       thumbDiv.textContent = '📷';
