@@ -163,10 +163,10 @@ function renderItems() {
     thumbDiv.dataset.idx = idx;
     thumbDiv.title = 'Clic para agregar imagen';
     thumbDiv.onclick = () => abrirImgModal('cot', null, idx);
-    if (item.imageUrl) {
+    if (item.imageUrl || item.driveFileId) {
       const im = document.createElement('img');
-      im.src = item.imageUrl; im.alt = '';
-      im.onerror = () => { thumbDiv.innerHTML = '📷'; };
+      im.alt = '';
+      Catalog.loadImage(im, item.imageUrl, item.driveFileId, thumbDiv);
       thumbDiv.appendChild(im);
     } else {
       thumbDiv.textContent = '📷';
