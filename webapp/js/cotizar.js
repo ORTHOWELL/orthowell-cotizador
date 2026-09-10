@@ -452,7 +452,18 @@ function cargarCotizacionGuardada(id) {
   set('validez',    cot.validez);
   set('notas-extra',cot.notasExtra);
 
-  window._cotItems = (cot.items || []).map(i => ({ ...i }));
+  // Enriquecer ítems con imageUrl/driveFileId actuales del catálogo.
+  // Cubre cotizaciones antiguas guardadas antes de que existiera driveFileId en el ítem.
+  window._cotItems = (cot.items || []).map(i => {
+    const cat = Catalog.getAll().find(p =>
+      (i.ref && p.ref && p.ref === i.ref) || p.nombre === i.nombre
+    );
+    return {
+      ...i,
+      imageUrl:    i.imageUrl    || cat?.imageUrl    || '',
+      driveFileId: i.driveFileId || cat?.driveFileId || '',
+    };
+  });
   cerrarHistorial();
   renderItems();
   updateSummary();
