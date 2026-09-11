@@ -163,13 +163,14 @@ function renderItems() {
     thumbDiv.dataset.idx = idx;
     thumbDiv.title = 'Clic para agregar imagen';
     thumbDiv.onclick = () => abrirImgModal('cot', null, idx);
-    // Buscar imagen actualizada en catálogo (por ref o nombre) para cubrir
-    // cotizaciones antiguas que no tienen driveFileId guardado en el ítem
+    // Prioridad: valores propios del ítem → fallback al catálogo actual.
+    // Para ítems nuevos: item.imageUrl ya tiene la base64 del catálogo.
+    // Para cotizaciones antiguas sin driveFileId: el catálogo lo aporta.
     const _catProd = Catalog.getAll().find(p =>
       (item.ref && p.ref && p.ref === item.ref) || p.nombre === item.nombre
     );
-    const _imgUrl     = _catProd?.imageUrl     || item.imageUrl     || '';
-    const _imgDriveId = _catProd?.driveFileId  || item.driveFileId  || '';
+    const _imgUrl     = item.imageUrl     || _catProd?.imageUrl     || '';
+    const _imgDriveId = item.driveFileId  || _catProd?.driveFileId  || '';
     if (_imgUrl || _imgDriveId) {
       const im = document.createElement('img');
       im.alt = '';
