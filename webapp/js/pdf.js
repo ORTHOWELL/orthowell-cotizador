@@ -214,9 +214,10 @@ const Pdf = (() => {
 
       let y=0, pageNum=1;
       const totalPagesExp = '{{p}}';
-      const ROW_H=14;
+      const IMG_S=16;           // lado máximo de la imagen del producto (mm)
+      const ROW_H=IMG_S+2;
       const PAGE_BOTTOM = NOTES_BOX_Y - 4;  // 4mm de margen entre último producto y notas
-      const cols=[12,10,62,12,24,24,CW-12-10-62-12-24-24];
+      const cols=[IMG_S+2,8,62,12,24,24,CW-(IMG_S+2)-8-62-12-24-24];
 
       function hdr() {
         const brand = loadBrand();
@@ -345,17 +346,21 @@ const Pdf = (() => {
         if (idx%2===0) { doc.setFillColor(250,250,248); doc.rect(ML,y,CW,rowH,'F'); }
         doc.setDrawColor(...BD); doc.line(ML,y+rowH,ML+CW,y+rowH);
 
-        const iS = Math.min(rowH-2, 12);
+        // Imagen: conserva proporción y se centra en la celda
+        const iS = Math.min(rowH-2, IMG_S);
         const imgData = item._pdfImg || (item.imageUrl?.startsWith('data:image') ? item.imageUrl : null);
+        let noImg = !imgData;
         if (imgData) {
           try {
             const fmt = imgData.includes('data:image/png') ? 'PNG' : 'JPEG';
-            doc.addImage(imgData, fmt, ML+1, y+1, iS, iS);
-          } catch(e) {
-            doc.setFillColor(235,235,232); doc.roundedRect(ML+1,y+1,iS,iS,1,1,'F');
-          }
-        } else {
-          doc.setFillColor(235,235,232); doc.roundedRect(ML+1,y+1,iS,iS,1,1,'F');
+            const ip = doc.getImageProperties(imgData);
+            const r = ip.width / ip.height;
+            const iw = r >= 1 ? iS : iS * r, ih = r >= 1 ? iS / r : iS;
+            doc.addImage(imgData, fmt, ML+(cols[0]-iw)/2, y+(rowH-ih)/2, iw, ih);
+          } catch(e) { noImg = true; }
+        }
+        if (noImg) {
+          doc.setFillColor(235,235,232); doc.roundedRect(ML+(cols[0]-iS)/2, y+(rowH-iS)/2, iS, iS, 1, 1, 'F');
         }
 
         const midY = y + rowH/2 + 1;
