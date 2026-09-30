@@ -5,6 +5,24 @@
 // ── FORMAT HELPERS ──────────────────────────────────────────────────
 function fNum(n) { return Math.round(n).toLocaleString('es-CO'); }
 function fCOP(n) { return '$' + fNum(n); }
+
+// Desglose de IVA de una cotización. Los precios de los ítems con IVA ya lo incluyen:
+// base = valor de la línea / (1 + tarifa). Se agrupa por tarifa y se redondea una sola vez
+// por grupo; subtotal + IVA siempre suma exactamente el total.
+function desgloseIva(items) {
+  const total = items.reduce((s, i) => s + i.cant * i.precio, 0);
+  const grupos = {};
+  items.forEach(i => {
+    const r = i.iva || 0;
+    if (r > 0) grupos[r] = (grupos[r] || 0) + i.cant * i.precio;
+  });
+  const ivas = Object.keys(grupos).map(Number).sort((a, b) => a - b).map(r => {
+    const bruto = grupos[r];
+    return { tarifa: r, valor: bruto - Math.round(bruto / (1 + r / 100)) };
+  });
+  const ivaTotal = ivas.reduce((s, x) => s + x.valor, 0);
+  return { subtotal: total - ivaTotal, ivas, total };
+}
 function escH(s) {
   return String(s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')

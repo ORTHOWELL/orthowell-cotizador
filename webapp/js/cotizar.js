@@ -262,11 +262,15 @@ function renderItems() {
   table.appendChild(tbody);
 
   const tfoot = document.createElement('tfoot');
-  tfoot.innerHTML =
-    '<tr class="total-row">' +
-    '<td colspan="5" class="total-label">TOTAL (IVA INCLUIDO)</td>' +
-    '<td colspan="3">$' + fNum(total) + '</td>' +
-    '</tr>';
+  const bd = desgloseIva(window._cotItems);
+  const subRow = (label, valor) =>
+    '<tr class="total-row sub"><td colspan="5" class="total-label">' + label + '</td>' +
+    '<td colspan="3">$' + fNum(valor) + '</td></tr>';
+  tfoot.innerHTML = bd.ivas.length
+    ? subRow('SUBTOTAL (SIN IVA)', bd.subtotal) +
+      bd.ivas.map(x => subRow('IVA ' + x.tarifa + '%', x.valor)).join('') +
+      '<tr class="total-row"><td colspan="5" class="total-label">TOTAL</td><td colspan="3">$' + fNum(total) + '</td></tr>'
+    : '<tr class="total-row"><td colspan="5" class="total-label">TOTAL (SIN IVA)</td><td colspan="3">$' + fNum(total) + '</td></tr>';
   table.appendChild(tfoot);
   const wrap = document.createElement('div');
   wrap.className = 'items-table-wrap';

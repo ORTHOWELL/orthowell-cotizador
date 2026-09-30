@@ -206,7 +206,11 @@ const Pdf = (() => {
       const nl = _savedNotes.flatMap(n => n.split('\n').filter(l=>l.trim()).map(l => '• '+l.trim()));
       nl.push(`• Validez de la oferta: ${validez}.`);
       if (notas) notas.split('\n').filter(l=>l.trim()).forEach(l => nl.push('• '+l.trim()));
-      const notesH = NOTE_START + nl.length * LINE_H + BOX_PAD + 2; // +2 margen extra de seguridad
+      // Desglose de IVA (recuadro de total, a la derecha de las notas)
+      const bd = desgloseIva(window._cotItems);
+      const TOT_ROW=5, TOT_BOX_H = bd.ivas.length ? 14 + (1 + bd.ivas.length) * TOT_ROW + 3 : 18;
+      const notesH = Math.max(NOTE_START + nl.length * LINE_H + BOX_PAD + 2, // +2 margen extra de seguridad
+                              TOT_BOX_H);
 
       const BANK_BAND_H = 8;
       const BANK_BAND_Y = H - 18 - 2 - BANK_BAND_H;    // 269mm → banda de banco
@@ -320,14 +324,30 @@ const Pdf = (() => {
         // ── Recuadro TOTAL (derecha, alineado con la parte superior de notas)
         const tx=ML+CW*0.64, tW=CW*0.36;
         doc.setFillColor(...DK);
-        doc.roundedRect(tx, NOTES_BOX_Y, tW, 18, 2, 2, 'F');
-        const _allIva  = window._cotItems.every(i  => (i.iva  || 0) > 0);
-        const _noneIva = window._cotItems.every(i  => (i.iva  || 0) === 0);
-        const _totalLbl = _allIva ? 'TOTAL (IVA INCL.)' : _noneIva ? 'TOTAL (SIN IVA)' : 'TOTAL (VER IVA X ÍTEM)';
-        doc.setTextColor(...WH); doc.setFont('helvetica','bold'); doc.setFontSize(8);
-        doc.text(_totalLbl, tx+tW/2, NOTES_BOX_Y+7, {align:'center'});
-        doc.setFontSize(14); doc.setTextColor(...OR);
-        doc.text('$'+fNum(total), tx+tW/2, NOTES_BOX_Y+14.5, {align:'center'});
+        doc.roundedRect(tx, NOTES_BOX_Y, tW, TOT_BOX_H, 2, 2, 'F');
+        if (!bd.ivas.length) {
+          // Ningún ítem con IVA: solo el total
+          doc.setTextColor(...WH); doc.setFont('helvetica','bold'); doc.setFontSize(8);
+          doc.text('TOTAL (SIN IVA)', tx+tW/2, NOTES_BOX_Y+7, {align:'center'});
+          doc.setFontSize(14); doc.setTextColor(...OR);
+          doc.text('$'+fNum(total), tx+tW/2, NOTES_BOX_Y+14.5, {align:'center'});
+        } else {
+          const L = tx+4, R = tx+tW-4;
+          let ry = NOTES_BOX_Y + 6.5;
+          doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(210,210,210);
+          doc.text('Subtotal (sin IVA)', L, ry); doc.text('$'+fNum(bd.subtotal), R, ry, {align:'right'});
+          bd.ivas.forEach(x => {
+            ry += TOT_ROW;
+            doc.text(`IVA ${x.tarifa}%`, L, ry); doc.text('$'+fNum(x.valor), R, ry, {align:'right'});
+          });
+          ry += 2.5;
+          doc.setDrawColor(90,90,90); doc.line(L, ry, R, ry);
+          ry += 6.5;
+          doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...WH);
+          doc.text('TOTAL', L, ry);
+          doc.setFontSize(13); doc.setTextColor(...OR);
+          doc.text('$'+fNum(total), R, ry, {align:'right'});
+        }
       }
 
       hdr();
