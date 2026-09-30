@@ -544,6 +544,7 @@ function abrirLightbox(thumbSrc, driveFileId) {
   // mostrarlo directamente sin opacidad reducida — ya es calidad completa.
   const isAlreadyFull = thumbSrc && thumbSrc.startsWith('blob:');
 
+  _lbReset();
   img.src = thumbSrc || '';
   img.style.opacity = (fileId && !isAlreadyFull) ? '0.5' : '1';
   if (spin) spin.style.display = (fileId && !isAlreadyFull) ? 'block' : 'none';
@@ -571,7 +572,92 @@ function cerrarLightbox() {
   lb.style.display = 'none';
   document.getElementById('img-lightbox-img').src = '';
   document.body.style.overflow = '';
+  _lbReset();
 }
+
+// ── ZOOM DEL LIGHTBOX: rueda, doble toque/clic, pellizco y arrastre ──
+const _lbZ = { s: 1, x: 0, y: 0, MAX: 5 };
+function _lbApply() {
+  const img = document.getElementById('img-lightbox-img');
+  if (!img) return;
+  const z = _lbZ;
+  // Limitar el desplazamiento para que la imagen no se salga de la pantalla
+  const mx = Math.max(0, (img.offsetWidth  * z.s - window.innerWidth)  / 2);
+  const my = Math.max(0, (img.offsetHeight * z.s - window.innerHeight) / 2);
+  z.x = Math.min(mx, Math.max(-mx, z.x));
+  z.y = Math.min(my, Math.max(-my, z.y));
+  img.style.transform = `translate(${z.x}px,${z.y}px) scale(${z.s})`;
+  img.style.cursor = z.s > 1 ? 'grab' : 'zoom-in';
+}
+function _lbReset() { _lbZ.s = 1; _lbZ.x = 0; _lbZ.y = 0; _lbApply(); }
+// Cambia el zoom manteniendo fijo el punto (cx, cy) de la pantalla
+function _lbZoomAt(cx, cy, s) {
+  const z = _lbZ;
+  s = Math.min(z.MAX, Math.max(1, s));
+  const dx = cx - (window.innerWidth  / 2 + z.x);
+  const dy = cy - (window.innerHeight / 2 + z.y);
+  z.x += dx * (1 - s / z.s);
+  z.y += dy * (1 - s / z.s);
+  z.s = s;
+  _lbApply();
+}
+function _lbInitZoom() {
+  const lb  = document.getElementById('img-lightbox');
+  const img = document.getElementById('img-lightbox-img');
+  if (!lb || !img) return;
+  const pts = new Map();   // punteros activos (dedos / ratón)
+  let moved = false, lastTap = 0;
+
+  img.style.touchAction = 'none';
+  img.draggable = false;
+  img.addEventListener('click', e => e.stopPropagation());   // tocar la imagen no cierra
+  img.addEventListener('load', _lbApply);                    // re-limitar al cargar la versión completa
+
+  lb.addEventListener('wheel', e => {
+    e.preventDefault();
+    _lbZoomAt(e.clientX, e.clientY, _lbZ.s * (e.deltaY < 0 ? 1.2 : 1 / 1.2));
+  }, { passive: false });
+
+  img.addEventListener('pointerdown', e => {
+    try { img.setPointerCapture(e.pointerId); } catch(_) {}
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 1) moved = false;
+  });
+  img.addEventListener('pointermove', e => {
+    const prev = pts.get(e.pointerId);
+    if (!prev) return;
+    const cur = { x: e.clientX, y: e.clientY };
+    if (Math.abs(cur.x - prev.x) + Math.abs(cur.y - prev.y) > 2) moved = true;
+    if (pts.size === 1 && _lbZ.s > 1) {
+      _lbZ.x += cur.x - prev.x; _lbZ.y += cur.y - prev.y;
+      _lbApply();
+    } else if (pts.size === 2) {
+      const other = [...pts].find(([id]) => id !== e.pointerId)[1];
+      const d0 = Math.hypot(prev.x - other.x, prev.y - other.y);
+      const d1 = Math.hypot(cur.x  - other.x, cur.y  - other.y);
+      // Seguir el punto medio entre los dedos y escalar alrededor de él
+      _lbZ.x += (cur.x - prev.x) / 2; _lbZ.y += (cur.y - prev.y) / 2;
+      if (d0 > 0) _lbZoomAt((cur.x + other.x) / 2, (cur.y + other.y) / 2, _lbZ.s * d1 / d0);
+      moved = true;
+    }
+    pts.set(e.pointerId, cur);
+  });
+  const up = e => {
+    if (!pts.delete(e.pointerId) || pts.size) return;
+    if (e.type === 'pointerup' && !moved) {
+      const now = Date.now();
+      if (now - lastTap < 300) {   // doble toque / doble clic
+        _lbZoomAt(e.clientX, e.clientY, _lbZ.s > 1 ? 1 : 2.5);
+        lastTap = 0;
+      } else lastTap = now;
+    }
+  };
+  img.addEventListener('pointerup', up);
+  img.addEventListener('pointercancel', up);
+}
+// El HTML del lightbox está después de este script: esperar al DOM
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _lbInitZoom);
+else _lbInitZoom();
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { cerrarLightbox(); cerrarEscaner(); }
 });

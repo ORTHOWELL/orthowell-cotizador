@@ -850,19 +850,22 @@ const Catalog = (() => {
               const img = new Image();
               img.crossOrigin = 'anonymous';
               img.onload = () => {
-                const c = document.createElement('canvas');
-                const MAX = 800;
-                let w = img.width, h = img.height;
-                if (w > MAX || h > MAX) { if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;} }
-                c.width = w; c.height = h;
-                c.getContext('2d').drawImage(img, 0, 0, w, h);
-                const b64 = c.toDataURL('image/jpeg', 0.82);
+                const enc = (MAX, q) => {
+                  const c = document.createElement('canvas');
+                  let w = img.width, h = img.height;
+                  if (w > MAX || h > MAX) { if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;} }
+                  c.width = w; c.height = h;
+                  c.getContext('2d').drawImage(img, 0, 0, w, h);
+                  return c.toDataURL('image/jpeg', q);
+                };
+                // Drive: alta calidad. Respaldo local (sin Drive): versión liviana.
+                const local = () => { setImage(prod.id, enc(800, 0.82), ''); ok++; res(); };
                 if (Auth.isAuthenticated()) {
-                  Sync.uploadImageToDrive(prod.ref || `prod_${prod.id}`, b64)
+                  Sync.uploadImageToDrive(prod.ref || `prod_${prod.id}`, enc(1600, 0.88))
                     .then(result => { setImage(prod.id, result.url, result.fileId); ok++; res(); })
-                    .catch(() => { setImage(prod.id, b64, ''); ok++; res(); });
+                    .catch(local);
                 } else {
-                  setImage(prod.id, b64, ''); ok++; res();
+                  local();
                 }
               };
               img.onerror = () => { err++; res(); };

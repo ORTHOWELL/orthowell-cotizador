@@ -235,7 +235,10 @@ function compressAndSet(file, callback) {
   reader.onload = ev => {
     const img = new Image();
     img.onload = () => {
-      const MAX = 800;
+      // Catálogo: alta calidad (va a Drive, se ve en el lightbox con zoom).
+      // Ítem de cotización: liviana (queda embebida en la cotización).
+      const hi = window._imgTarget?.type === 'catalog';
+      const MAX = hi ? 1600 : 800;
       let w = img.width, h = img.height;
       if (w > MAX || h > MAX) {
         if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
@@ -244,7 +247,7 @@ function compressAndSet(file, callback) {
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      callback(canvas.toDataURL('image/jpeg', 0.75));
+      callback(canvas.toDataURL('image/jpeg', hi ? 0.88 : 0.75));
     };
     img.src = ev.target.result;
   };
