@@ -49,14 +49,35 @@ function buscarProducto(q) {
   el.classList.add('visible');
 }
 
+// ── MISMO ÍTEM / PRODUCTO DEL CATÁLOGO ─────────────────────────────
+// Dos líneas se fusionan (suma de cantidad) solo si coinciden nombre, referencia y precio.
+// Productos con el mismo nombre pero distinta referencia o precio son líneas separadas.
+function _findSameItem(nombre, ref, precio) {
+  const r = (ref || '').trim().toUpperCase();
+  return window._cotItems.find(i =>
+    i.nombre === nombre && (i.ref || '').trim().toUpperCase() === r && i.precio === precio
+  );
+}
+
+// Producto del catálogo que corresponde a un ítem: primero por referencia exacta;
+// por nombre solo si no hay coincidencia de referencia (cotizaciones antiguas).
+function _findCatalogProd(item) {
+  const all = Catalog.getAll();
+  if (item.ref) {
+    const byRef = all.find(p => p.ref && p.ref === item.ref);
+    if (byRef) return byRef;
+  }
+  return all.find(p => p.nombre === item.nombre);
+}
+
 // ── AGREGAR DESDE CATÁLOGO ────────────────────────────────────────
 function addFromCatalog(id, precioKey) {
   const p = Catalog.getById(id);
   if (!p) return;
   const precio = (precioKey && p[precioKey]) ? p[precioKey] : p.precio;
   const precioLabel = precioKey === 'precio2' ? 'P2' : precioKey === 'precio3' ? 'P3' : 'P1';
-  const ex = window._cotItems.find(i => i.nombre === p.nombre);
-  if (ex) { ex.cant++; ex.precio = precio; }
+  const ex = _findSameItem(p.nombre, p.ref, precio);
+  if (ex) ex.cant++;
   else window._cotItems.push({ nombre: p.nombre, ref: p.ref || '', cant: 1, precio, iva: p.iva || 0, obs: '', imageUrl: p.imageUrl || '', driveFileId: p.driveFileId || '' });
   document.getElementById('search-input').value = '';
   document.getElementById('search-results').classList.remove('visible');
@@ -80,7 +101,7 @@ function agregarManual(guardarEnCatalogo) {
   const ref     = document.getElementById('m-ref').value.trim().toUpperCase();
   const marca   = document.getElementById('m-marca').value.trim();
 
-  const ex = window._cotItems.find(i => i.nombre === nombre);
+  const ex = _findSameItem(nombre, ref, precio);
   if (ex) ex.cant += cant;
   else window._cotItems.push({ nombre, ref, cant, precio, iva, obs, imageUrl: '' });
 
@@ -166,9 +187,7 @@ function renderItems() {
     // Prioridad: valores propios del ítem → fallback al catálogo actual.
     // Para ítems nuevos: item.imageUrl ya tiene la base64 del catálogo.
     // Para cotizaciones antiguas sin driveFileId: el catálogo lo aporta.
-    const _catProd = Catalog.getAll().find(p =>
-      (item.ref && p.ref && p.ref === item.ref) || p.nombre === item.nombre
-    );
+    const _catProd = _findCatalogProd(item);
     const _imgUrl     = item.imageUrl     || _catProd?.imageUrl     || '';
     const _imgDriveId = item.driveFileId  || _catProd?.driveFileId  || '';
     if (_imgUrl || _imgDriveId) {
@@ -460,9 +479,7 @@ function cargarCotizacionGuardada(id) {
   // Enriquecer ítems con imageUrl/driveFileId actuales del catálogo.
   // Cubre cotizaciones antiguas guardadas antes de que existiera driveFileId en el ítem.
   window._cotItems = (cot.items || []).map(i => {
-    const cat = Catalog.getAll().find(p =>
-      (i.ref && p.ref && p.ref === i.ref) || p.nombre === i.nombre
-    );
+    const cat = _findCatalogProd(i);
     return {
       ...i,
       imageUrl:    i.imageUrl    || cat?.imageUrl    || '',
@@ -733,7 +750,7 @@ function consultaToggleExtra(btn) {
 function consultaAgregarCot(id) {
   const p = Catalog.getById(id);
   if (!p) return;
-  const ex = window._cotItems.find(i => i.nombre === p.nombre);
+  const ex = _findSameItem(p.nombre, p.ref, p.precio || 0);
   if (ex) ex.cant++;
   else window._cotItems.push({ nombre: p.nombre, ref: p.ref||'', cant: 1, precio: p.precio||0, iva: p.iva||0, obs: '', imageUrl: p.imageUrl||'', driveFileId: p.driveFileId||'' });
   toast(`✓ "${p.nombre.substring(0,30)}..." agregado a la cotización`, 'success');
